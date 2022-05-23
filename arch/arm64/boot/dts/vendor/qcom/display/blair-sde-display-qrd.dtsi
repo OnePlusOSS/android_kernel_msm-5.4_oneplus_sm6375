@@ -1,0 +1,226 @@
+/* Should extend holi-sde-display-qrd-pm6125.dtsi */
+
+&dsi_r66451_amoled_cmd {
+	/delete-property/ qcom,mdss-dsi-t-clk-post;
+	/delete-property/ qcom,mdss-dsi-t-clk-pre;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [00 10 04 04 12 1e 04
+				04 03 02 04 00 0e 09];
+		};
+
+		timing@1 {
+			qcom,mdss-dsi-panel-phy-timings = [00 16 06 05 14 1f 06
+				06 06 02 04 00 14 0b];
+		};
+
+		timing@2 {
+			qcom,mdss-dsi-panel-phy-timings = [00 1c 08 07 17 16 07
+				07 08 02 04 00 19 0c];
+		};
+	};
+};
+
+&dsi_r66451_amoled_video {
+	/delete-property/ qcom,mdss-dsi-t-clk-post;
+	/delete-property/ qcom,mdss-dsi-t-clk-pre;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [00 1c 08 07 17 16 07
+				07 08 02 04 00 19 0c];
+		};
+	};
+};
+
+&dsi_r66451_amoled_90hz_cmd {
+	/delete-property/ qcom,mdss-dsi-t-clk-post;
+	/delete-property/ qcom,mdss-dsi-t-clk-pre;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [00 10 04 04 12 1e 04
+				04 03 02 04 00 0e 09];
+		};
+
+		timing@1 {
+			qcom,mdss-dsi-panel-phy-timings = [00 16 06 05 14 1f 06
+				06 06 02 04 00 14 0b];
+		};
+	};
+};
+
+&dsi_r66451_amoled_90hz_video {
+	/delete-property/ qcom,mdss-dsi-t-clk-post;
+	/delete-property/ qcom,mdss-dsi-t-clk-pre;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [00 16 06 05 14 1f 06
+				06 06 02 04 00 14 0b];
+		};
+	};
+};
+
+&dsi_r66451_amoled_60hz_video {
+	/delete-property/ qcom,mdss-dsi-t-clk-post;
+	/delete-property/ qcom,mdss-dsi-t-clk-pre;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [00 10 04 04 12 1e 04
+				04 03 02 04 00 0e 09];
+		};
+	};
+};
+
+&dsi_oplus21221samsung_ams643ye01_1080_2400_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_avdd>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <2047>;
+	qcom,mdss-brightness-max-level = <2047>;
+	qcom,mdss-brightness-default-level = <400>;
+	qcom,platform-te-gpio = <&tlmm 23 0>;
+	qcom,platform-reset-gpio = <&tlmm 47 0>;
+	oplus,mdss-dsi-vendor-name = "AMS643YE01";
+	oplus,mdss-dsi-manufacture = "samsung2047";
+	oplus,osc-support;
+
+	qcom,ulps-enabled;
+	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
+				"src_byte_clk0", "src_pixel_clk0",
+				"shadow_byte_clk0", "shadow_pixel_clk0";
+	qcom,mdss-dsi-t-clk-post = <0x1A>;
+	qcom,mdss-dsi-t-clk-pre = <0x1F>;
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings = [00 1C 08 07 23 22 07
+				07 08 02 04 00 1a 17];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_s643xy05_samsung_fhd_video {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_avdd>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-normal-max-level = <2047>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-brightness-normal-max-level = <2047>;
+	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-default-level = <1215>;
+	qcom,platform-te-gpio = <&tlmm 23 0>;
+	qcom,platform-reset-gpio = <&tlmm 47 0>;
+	oplus,mdss-dsi-vendor-name = "AMS644VA04";
+	oplus,mdss-dsi-manufacture = "samsung4096";
+	oplus,is-ramless;
+	oplus,bl_interpolate_nosub;
+
+	qcom,ulps-enabled;
+	qcom,suspend-ulps-enabled;
+	qcom,mdss-dsi-t-clk-post = <0x0F>;
+	qcom,mdss-dsi-t-clk-pre = <0x1E>;
+	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
+				"src_byte_clk0", "src_pixel_clk0",
+				"shadow_byte_clk0", "shadow_pixel_clk0";
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings = [00 24 0A 0A 1A 24 0A
+				0A 09 02 04 00 1E 0F];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+		timing@1{
+			qcom,mdss-dsi-panel-phy-timings = [00 24 0A 0A 1A 24 0A
+				0A 09 02 04 00 1E 0F];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_s643xy05_samsung_fhd_video_ft3518 {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_avdd>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-normal-max-level = <2047>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-brightness-normal-max-level = <2047>;
+	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-default-level = <1215>;
+	qcom,platform-te-gpio = <&tlmm 23 0>;
+	qcom,platform-reset-gpio = <&tlmm 47 0>;
+	oplus,mdss-dsi-vendor-name = "AMS643YE01";
+	oplus,mdss-dsi-manufacture = "samsung2047";
+	oplus,is-ramless;
+	oplus,bl_interpolate_nosub;
+
+	qcom,ulps-enabled;
+	qcom,suspend-ulps-enabled;
+	qcom,mdss-dsi-t-clk-post = <0x0F>;
+	qcom,mdss-dsi-t-clk-pre = <0x1E>;
+	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
+				"src_byte_clk0", "src_pixel_clk0",
+				"shadow_byte_clk0", "shadow_pixel_clk0";
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings = [00 24 0A 0A 1A 24 0A
+				0A 09 02 04 00 1E 0F];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+		timing@1{
+			qcom,mdss-dsi-panel-phy-timings = [00 24 0A 0A 1A 24 0A
+				0A 09 02 04 00 1E 0F];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_oplus21291samsung_ams643ye01_1080_2400_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_avdd>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-dsi-bl-normal-max-level = <2047>;
+	qcom,mdss-brightness-normal-max-level = <2047>;
+	qcom,mdss-brightness-default-level = <400>;
+	qcom,platform-te-gpio = <&tlmm 23 0>;
+	qcom,platform-reset-gpio = <&tlmm 47 0>;
+	qcom,platform-panel-vout-gpio = <&tlmm 86 0>;
+	oplus,mdss-dsi-vendor-name = "AMS643YE01";
+	oplus,mdss-dsi-manufacture = "samsung2047";
+	qcom,mdss-dsi-dc-backlight-level = <520>;
+	oplus,osc-support;
+	oplus,mdss-dsi-osc-clk-mode0-rate = <167000>;
+	oplus,mdss-dsi-osc-clk-mode1-rate = <169000>;
+	oplus,bl_interpolate_nosub;
+	qcom,mdss-panel-serial-number-index = <7>;
+
+	qcom,ulps-enabled;
+	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
+				"src_byte_clk0", "src_pixel_clk0",
+				"shadow_byte_clk0", "shadow_pixel_clk0";
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings = [00 24 0A 0A 1A 24 0A
+				0A 09 02 04 00 1E 0F];
+
+			qcom,display-topology = <1 1 1>;
+			qcom,default-topology-index = <0>;
+		};
+		timing@1{
+			qcom,mdss-dsi-panel-phy-timings = [00 24 0A 0A 1A 24 0A
+				0A 09 02 04 00 1E 0F];
+
+			qcom,display-topology = <1 1 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};

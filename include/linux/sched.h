@@ -34,6 +34,10 @@
 #include <linux/android_kabi.h>
 #include <linux/android_vendor.h>
 
+#ifdef CONFIG_OPLUS_FEATURE_AUDIO_OPT
+#include <linux/sched_assist/sched_assist_status.h>
+#endif
+
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
 struct backing_dev_info;
@@ -218,6 +222,15 @@ enum task_boost_type {
 	} while (0)
 
 #endif
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern int sysctl_sched_assist_enabled;
+extern int sysctl_sched_assist_scene;
+extern int sysctl_input_boost_enabled;
+extern int sysctl_slide_boost_enabled;
+extern int sysctl_boost_task_threshold;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
 
 /* Task command name length: */
 #define TASK_COMM_LEN			16
@@ -1349,6 +1362,9 @@ struct task_struct {
 	int				latency_record_count;
 	struct latency_record		latency_record[LT_SAVECOUNT];
 #endif
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_ION) && defined(CONFIG_DUMP_TASKS_MEM)
+	atomic64_t ions;
+#endif
 	/*
 	 * Time slack values; these are used to round up poll() and
 	 * select() etc timeout values. These are in nanoseconds.
@@ -1455,7 +1471,25 @@ struct task_struct {
 	/* Used by LSM modules for access restriction: */
 	void				*security;
 #endif
-
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	int ux_state;
+	atomic64_t inherit_ux;
+	struct list_head ux_entry;
+	int ux_depth;
+	u64 enqueue_time;
+	u64 inherit_ux_start;
+#ifdef CONFIG_OPLUS_FEATURE_AUDIO_OPT
+	struct task_info oplus_task_info;
+#endif
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_MMAP_LOCK_OPT)
+	int ux_once;
+	u64 get_mmlock_ts;
+	int get_mmlock;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+#ifdef CONFIG_OPLUS_FEATURE_IM
+	int im_flag;
+#endif
 #ifdef CONFIG_GCC_PLUGIN_STACKLEAK
 	unsigned long			lowest_stack;
 	unsigned long			prev_lowest_stack;
@@ -1477,6 +1511,7 @@ struct task_struct {
 	 * they are included in the randomized portion of task_struct.
 	 */
 	randomized_struct_fields_end
+
 
 	/* CPU-specific state of this task: */
 	struct thread_struct		thread;
@@ -1888,9 +1923,7 @@ extern void kick_process(struct task_struct *tsk);
 #else
 static inline void kick_process(struct task_struct *tsk) { }
 #endif
-
 extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec);
-
 static inline void set_task_comm(struct task_struct *tsk, const char *from)
 {
 	__set_task_comm(tsk, from, false);

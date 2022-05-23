@@ -25,6 +25,10 @@
 #include <linux/slab.h>
 #include <soc/qcom/boot_stats.h>
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#include <soc/oplus/system/boot_mode.h>
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+
 #define SE_I2C_TX_TRANS_LEN		(0x26C)
 #define SE_I2C_RX_TRANS_LEN		(0x270)
 #define SE_I2C_SCL_COUNTERS		(0x278)
@@ -979,6 +983,154 @@ geni_i2c_gsi_xfer_out:
 	return ret;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define MAX_RESET_COUNT			10
+#define FG_DEVICE_ADDR			0x55
+#define DEVICE_TYPE_ZY0602		3
+static bool (*poplus_vooc_get_fastchg_started)(void);
+static bool (*poplus_vooc_get_fastchg_ing)(void);
+static bool i2c_err_occured = false;
+static int fg_device_type = 0;
+static unsigned int err_count = 0;
+int oplus_get_fg_device_type(void)
+{
+	/* pr_err("oplus_get_fg_device_type fg_device_type[%d]\n", fg_device_type); */
+	return fg_device_type;
+}
+EXPORT_SYMBOL(oplus_get_fg_device_type);
+
+void oplus_set_fg_device_type(int device_type)
+{
+	pr_err("oplus_set_fg_device_type fg_device_type[%d]\n", fg_device_type);
+	fg_device_type = device_type;
+	return;
+}
+EXPORT_SYMBOL(oplus_set_fg_device_type);
+
+bool oplus_get_fg_i2c_err_occured(void)
+{
+	return i2c_err_occured;
+}
+EXPORT_SYMBOL(oplus_get_fg_i2c_err_occured);
+
+void oplus_set_fg_i2c_err_occured(bool i2c_err)
+{
+	i2c_err_occured = i2c_err;
+}
+EXPORT_SYMBOL(oplus_set_fg_i2c_err_occured);
+
+void oplus_vooc_get_fastchg_started_pfunc(bool (*pfunc)(void))
+{
+	poplus_vooc_get_fastchg_started = pfunc;
+}
+EXPORT_SYMBOL(oplus_vooc_get_fastchg_started_pfunc);
+
+void oplus_vooc_get_fastchg_ing_pfunc(bool (*pfunc)(void))
+{
+	poplus_vooc_get_fastchg_ing = pfunc;
+}
+EXPORT_SYMBOL(oplus_vooc_get_fastchg_ing_pfunc);
+
+static bool oplus_vooc_get_fastchg_started(void)
+{
+	bool ret = false;
+
+	if (poplus_vooc_get_fastchg_started == NULL) {
+		ret = false;
+	} else {
+		ret = poplus_vooc_get_fastchg_started();
+	}
+
+	return ret;
+}
+
+static bool oplus_vooc_get_fastchg_ing(void)
+{
+	bool ret = false;
+
+	if (poplus_vooc_get_fastchg_ing == NULL) {
+		ret = false;
+	} else {
+		ret = poplus_vooc_get_fastchg_ing();
+	}
+
+	return ret;
+}
+
+static void i2c_oplus_gpio_reset(struct geni_i2c_dev *gi2c)
+{
+	int ret = 0;
+	int i = 0;
+	static bool i2c_reset_processing = false;
+	int boot_mode = get_boot_mode();
+
+	//dev_err(gi2c->dev, "%s: start, return\n", __func__);
+	if (gi2c == NULL)
+		return;
+
+	if ((boot_mode != MSM_BOOT_MODE__NORMAL)
+			&& (boot_mode != MSM_BOOT_MODE__RECOVERY)
+			&& (boot_mode != MSM_BOOT_MODE__SILENCE)
+			&& (boot_mode != MSM_BOOT_MODE__SAU)
+			&& (boot_mode != MSM_BOOT_MODE__CHARGE)) {
+		/* dev_err(gi2c->dev, "%s: get_boot_mode[%d], return\n", __func__, boot_mode); */
+		return;
+	}
+
+	if (i2c_reset_processing == true) {
+		dev_err(gi2c->dev, "%s: i2c_reset is processing, return\n", __func__);
+		return;
+	}
+
+	i2c_reset_processing = true;
+
+	if (!IS_ERR_OR_NULL(gi2c->i2c_rsc.geni_gpio_pulldown)) {
+		dev_err(gi2c->dev, "%s: set geni_gpio_pulldown\n", __func__);
+		ret = pinctrl_select_state(gi2c->i2c_rsc.geni_pinctrl, gi2c->i2c_rsc.geni_gpio_pulldown);
+		if (ret) {
+			dev_err(gi2c->dev, "%s: error pinctrl_select_state pulldown, ret:%d\n", __func__, ret);
+			goto err;
+		}
+	} else {
+		goto err;
+	}
+
+	for (i = 0; i < 220; i++) {
+		usleep_range(10000, 11000);
+		if (oplus_vooc_get_fastchg_started() == true && oplus_vooc_get_fastchg_ing() == false) {
+			dev_err(gi2c->dev, "%s: vooc ready to start, don't pull down i2c, i:%d\n", __func__, i);
+			break;
+		}
+	}
+	oplus_set_fg_i2c_err_occured(true);
+
+	if (!IS_ERR_OR_NULL(gi2c->i2c_rsc.geni_gpio_pullup)) {
+		dev_err(gi2c->dev, "%s: set geni_gpio_pullup\n", __func__);
+		ret = pinctrl_select_state(gi2c->i2c_rsc.geni_pinctrl, gi2c->i2c_rsc.geni_gpio_pullup);
+		if (ret) {
+			dev_err(gi2c->dev, "%s:error pinctrl_select_state pullup, ret:%d\n", __func__, ret);
+		}
+	}
+	if (!IS_ERR_OR_NULL(gi2c->i2c_rsc.geni_gpio_active)) {
+		dev_err(gi2c->dev, "%s: set geni_gpio_active\n", __func__);
+		ret = pinctrl_select_state(gi2c->i2c_rsc.geni_pinctrl, gi2c->i2c_rsc.geni_gpio_active);
+		if (ret) {
+			dev_err(gi2c->dev, "%s:error pinctrl_select_state active, ret:%d\n", __func__, ret);
+			goto err;
+		}
+	} else {
+		goto err;
+	}
+
+	i2c_reset_processing = false;
+	dev_err(gi2c->dev, "%s: gpio reset successful id:%d\n", __func__, gi2c->adap.nr);
+	return;
+
+err:
+	i2c_reset_processing = false;
+}
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+
 static int geni_i2c_xfer(struct i2c_adapter *adap,
 			 struct i2c_msg msgs[],
 			 int num)
@@ -1165,6 +1317,32 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 			i2c_put_dma_safe_msg_buf(dma_buf, &msgs[i], !gi2c->err);
 		}
 		ret = gi2c->err;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if(msgs[i].addr == FG_DEVICE_ADDR) {
+			if (gi2c->err) {
+				/* dev_err(gi2c->dev, "gi2c->adap.nr[%d], err_count[%d], msgs[i].addr[0x%x]\n", gi2c->adap.nr, err_count, msgs[i].addr); */
+				if (oplus_get_fg_device_type() == DEVICE_TYPE_ZY0602) {
+					if (err_count >= 2) {
+						i2c_oplus_gpio_reset(gi2c);
+						err_count = 0;
+					} else {
+						err_count++;
+					}
+				} else {
+					if (err_count >= 1 && err_count < MAX_RESET_COUNT) {
+						i2c_oplus_gpio_reset(gi2c);
+					} else {
+						/* dev_err(gi2c->dev, "err_count(%d) >= %d or < 1, so not reset\n", err_count, MAX_RESET_COUNT); */
+					}
+					err_count++;
+				}
+			} else {
+				if(msgs[i].addr == FG_DEVICE_ADDR) {
+					err_count = 0;
+				}
+			}
+		}
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 		if (gi2c->err) {
 			GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
 				"i2c error :%d\n", gi2c->err);
@@ -1335,7 +1513,20 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		gi2c->is_shared = true;
 		dev_info(&pdev->dev, "Multi-EE usecase\n");
 	}
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	gi2c->i2c_rsc.geni_gpio_pulldown =
+		pinctrl_lookup_state(gi2c->i2c_rsc.geni_pinctrl,
+					PINCTRL_PULLDOWN);
+	if (IS_ERR_OR_NULL(gi2c->i2c_rsc.geni_gpio_pulldown)) {
+		dev_err(&pdev->dev, "No pulldown config specified\n");
+	}
+	gi2c->i2c_rsc.geni_gpio_pullup =
+		pinctrl_lookup_state(gi2c->i2c_rsc.geni_pinctrl,
+					PINCTRL_PULLUP);
+	if (IS_ERR_OR_NULL(gi2c->i2c_rsc.geni_gpio_pullup)) {
+		dev_err(&pdev->dev, "No pullup config specified\n");
+	}
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 	if (of_property_read_u32(pdev->dev.of_node, "qcom,clk-freq-out",
 				&gi2c->i2c_rsc.clk_freq_out))
 		gi2c->i2c_rsc.clk_freq_out = KHz(400);

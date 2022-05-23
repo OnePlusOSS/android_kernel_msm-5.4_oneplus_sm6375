@@ -4025,7 +4025,7 @@ static int dwc3_msm_id_notifier(struct notifier_block *nb,
 		return NOTIFY_DONE;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
-
+	dev_err(mdwc->dev, "dwc3_msm_id_notifier_EXTCON_USB_HOST:enter\n");
 	dbg_event(0xFF, "extcon idx", enb->idx);
 
 	id = event ? DWC3_ID_GROUND : DWC3_ID_FLOAT;
@@ -4079,7 +4079,7 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 		return NOTIFY_DONE;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
-
+	dev_err(mdwc->dev, "dwc3_msm_vbus_notifier_EXTOCN_USB:enter\n");
 	dbg_event(0xFF, "extcon idx", enb->idx);
 	dev_dbg(mdwc->dev, "vbus:%ld event received\n", event);
 	edev_name = extcon_get_edev_name(edev);
@@ -5684,6 +5684,13 @@ static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned int mA)
 
 	if (mdwc->apsd_source == IIO && chg_type != POWER_SUPPLY_TYPE_USB)
 		return 0;
+
+#ifdef CONFIG_OPLUS_FEATURE_CHG_MISC
+	dev_info(mdwc->dev, "Avail curr from USB = %u, pre max_power = %u\n", mA, mdwc->max_power);
+	if (mA == 0 || mA == 2) {
+		return 0;
+	}
+#endif
 
 	/* Set max current limit in uA */
 	pval.intval = 1000 * mA;

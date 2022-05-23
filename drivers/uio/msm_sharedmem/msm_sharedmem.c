@@ -17,6 +17,10 @@
 
 #define CLIENT_ID_PROP "qcom,client-id"
 #define MPSS_RMTS_CLIENT_ID 1
+//add for nv backup and restore
+//#ifdef FEATURE_OPLUS_NV_BACKUP
+#define MPSS_OEMBACK_CLIENT_ID 4
+//#endif /* FEATURE_OPLUS_NV_BACKUP */
 
 static int uio_get_mem_index(struct uio_info *info, struct vm_area_struct *vma)
 {
@@ -74,7 +78,12 @@ static void setup_shared_ram_perms(u32 client_id, phys_addr_t addr, u32 size,
 	int ret;
 	u32 source_vmlist[1] = {VMID_HLOS};
 
-	if (client_id != MPSS_RMTS_CLIENT_ID)
+	//add for nv backup and restore
+	//#ifdef FEATURE_OPLUS_NV_BACKUP
+	//if (client_id != MPSS_RMTS_CLIENT_ID)
+	//#else
+	if ((client_id != MPSS_RMTS_CLIENT_ID) && (client_id != MPSS_OEMBACK_CLIENT_ID))
+	//#endif /* FEATURE_OPLUS_NV_BACKUP */
 		return;
 
 	if (vm_nav_path) {

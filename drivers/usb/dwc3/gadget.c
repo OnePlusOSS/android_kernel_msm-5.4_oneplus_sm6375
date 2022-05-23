@@ -1877,7 +1877,7 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 
 	dev_err_ratelimited(dwc->dev, "request %pK was not queued to %s\n",
 			request, ep->name);
-	ret = -EINVAL;
+	//ret = -EINVAL;
 out:
 	spin_unlock_irqrestore(&dwc->lock, flags);
 

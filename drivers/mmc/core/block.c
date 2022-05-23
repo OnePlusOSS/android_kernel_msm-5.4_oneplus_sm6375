@@ -2248,8 +2248,13 @@ static bool mmc_blk_rw_wait_cond(struct mmc_queue *mq, int *err)
 static int mmc_blk_rw_wait(struct mmc_queue *mq, struct request **prev_req)
 {
 	int err = 0;
-
+#ifndef CONFIG_EMMC_SDCARD_OPTIMIZE
 	wait_event(mq->wait, mmc_blk_rw_wait_cond(mq, &err));
+#else
+	if(!wait_event_timeout(mq->wait, mmc_blk_rw_wait_cond(mq, &err),  msecs_to_jiffies(10000))) {
+		pr_err("%s wait_event_timeout expired!\n", __FUNCTION__);
+	}
+#endif
 
 	/* Always complete the previous request if there is one */
 	mmc_blk_mq_complete_prev_req(mq, prev_req);
@@ -3000,8 +3005,10 @@ static int mmc_blk_probe(struct mmc_card *card)
 	/*
 	 * Check that the card supports the command class(es) we need.
 	 */
+#ifndef CONFIG_EMMC_SDCARD_OPTIMIZE
 	if (!(card->csd.cmdclass & CCC_BLOCK_READ))
 		return -ENODEV;
+#endif
 
 	mmc_fixup_device(card, mmc_blk_fixups);
 
@@ -3058,6 +3065,17 @@ static int mmc_blk_probe(struct mmc_card *card)
 	return 0;
 }
 
+#ifdef CONFIG_EMMC_SDCARD_OPTIMIZE
+char *capacity_string(struct mmc_card *card){
+	static char cap_str[10] = "unknown";
+	struct mmc_blk_data *md = (struct mmc_blk_data *)card->dev.driver_data;
+	if(md==NULL){
+		return 0;
+	}
+	string_get_size((u64)get_capacity(md->disk), 512, STRING_UNITS_2, cap_str, sizeof(cap_str));
+	return cap_str;
+}
+#endif
 static void mmc_blk_remove(struct mmc_card *card)
 {
 	struct mmc_blk_data *md = dev_get_drvdata(&card->dev);

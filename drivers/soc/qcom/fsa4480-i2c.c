@@ -554,6 +554,21 @@ static int fsa4480_remove(struct i2c_client *i2c)
 	return 0;
 }
 
+static void fsa4480_shutdown(struct i2c_client *i2c) {
+	struct fsa4480_priv *fsa_priv =
+		(struct fsa4480_priv *)i2c_get_clientdata(i2c);
+
+	if (!fsa_priv) {
+		return;
+	}
+
+	pr_info("%s: recover all register while shutdown\n", __func__);
+
+	fsa4480_update_reg_defaults(fsa_priv->regmap);
+
+	return;
+}
+
 static const struct of_device_id fsa4480_i2c_dt_match[] = {
 	{
 		.compatible = "qcom,fsa4480-i2c",
@@ -568,6 +583,7 @@ static struct i2c_driver fsa4480_i2c_driver = {
 	},
 	.probe = fsa4480_probe,
 	.remove = fsa4480_remove,
+	.shutdown = fsa4480_shutdown,
 };
 
 static int __init fsa4480_init(void)

@@ -1,0 +1,11 @@
+
+&adsp_mem {
+    compatible = "removed-dma-pool";
+    no-map;
+    /delete-property/ reusable;
+    size = <0 0xC00000>;
+};
+
+&holi_snd {
+    oplus,mbhc-check-irq-en = <1>;
+};

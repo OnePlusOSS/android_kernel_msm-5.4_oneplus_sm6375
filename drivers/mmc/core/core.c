@@ -611,13 +611,11 @@ static int mmc_devfreq_create_freq_table(struct mmc_host *host)
 				mmc_hostname(host), clk_scaling->freq_table[i]);
 		break;
 	}
-
 	if (mmc_card_sd(host->card) && (clk_scaling->freq_table_sz < 2)) {
 		clk_scaling->freq_table[clk_scaling->freq_table_sz] =
-				host->card->clk_scaling_highest;
+			host->card->clk_scaling_highest;
 		clk_scaling->freq_table_sz++;
 	}
-
 out:
 	/**
 	 * devfreq requires unsigned long type freq_table while the
@@ -3231,7 +3229,11 @@ void mmc_stop_host(struct mmc_host *host)
 	}
 
 	host->rescan_disable = 1;
+#ifndef CONFIG_EMMC_SDCARD_OPTIMIZE
 	cancel_delayed_work_sync(&host->detect);
+#else
+	cancel_delayed_work(&host->detect);
+#endif
 
 	/* clear pm flags now and let card drivers set them as needed */
 	host->pm_flags = 0;

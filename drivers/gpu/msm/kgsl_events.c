@@ -5,6 +5,9 @@
 
 #include <linux/debugfs.h>
 #include <linux/rwlock.h>
+#if defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_OPLUS_FEATURE_UIFIRST)
+#include <linux/sched_assist/sched_assist_workqueue.h>
+#endif /* defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_OPLUS_FEATURE_UIFIRST) */
 
 #include "kgsl_debugfs.h"
 #include "kgsl_device.h"
@@ -269,6 +272,10 @@ int kgsl_add_event(struct kgsl_device *device, struct kgsl_event_group *group,
 	event->group = group;
 
 	INIT_WORK(&event->work, _kgsl_event_worker);
+
+#if defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_OPLUS_FEATURE_UIFIRST)
+	set_uxwork(&event->work);
+#endif /* defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_OPLUS_FEATURE_UIFIRST) */
 
 	trace_kgsl_register_event(KGSL_CONTEXT_ID(context), timestamp, func);
 

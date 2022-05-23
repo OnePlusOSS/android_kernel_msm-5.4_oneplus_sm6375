@@ -968,6 +968,10 @@ static void msm_geni_serial_poll_put_char(struct uart_port *uport,
 }
 #endif
 
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+extern bool ext_boot_with_console(void);
+#endif
+
 #if IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE) || \
 					IS_ENABLED(CONFIG_CONSOLE_POLL)
 static void msm_geni_serial_wr_char(struct uart_port *uport, int ch)
@@ -1130,6 +1134,12 @@ static int handle_rx_console(struct uart_port *uport,
 	unsigned char *rx_char;
 	struct tty_port *tport;
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if(!ext_boot_with_console()){
+		return -EPERM;
+	}
+	#endif
 
 	tport = &uport->state->port;
 	for (i = 0; i < rx_fifo_wc; i++) {
@@ -1883,40 +1893,6 @@ exit_handle_tx:
 	return 0;
 }
 
-static void check_rx_buf(char *buf, struct uart_port *uport, int size)
-{
-	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
-	unsigned int rx_data;
-	bool fault = false;
-
-	rx_data = *(u32 *)buf;
-	/* check for first 4 bytes of RX data for faulty zero pattern */
-	if (rx_data == 0x0) {
-		if (size <= 4) {
-			fault = true;
-		} else {
-			/*
-			 * check for last 4 bytes of data in RX buffer for
-			 * faulty pattern
-			 */
-			if (memcmp(buf+(size-4), "\x0\x0\x0\x0", 4) == 0)
-				fault = true;
-		}
-
-		if (fault) {
-			IPC_LOG_MSG(msm_port->ipc_log_rx,
-				"RX Invalid packet %s\n", __func__);
-			geni_se_dump_dbg_regs(&msm_port->serial_rsc,
-				uport->membase, msm_port->ipc_log_misc);
-			/*
-			 * Add 2 msecs delay in order for dma rx transfer
-			 * to be actually completed.
-			 */
-			udelay(2000);
-		}
-	}
-}
-
 static int msm_geni_serial_handle_dma_rx(struct uart_port *uport, bool drop_rx)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
@@ -1945,9 +1921,6 @@ static int msm_geni_serial_handle_dma_rx(struct uart_port *uport, bool drop_rx)
 					__func__, rx_bytes);
 		goto exit_handle_dma_rx;
 	}
-
-	/* Check RX buffer data for faulty pattern*/
-	check_rx_buf((char *)msm_port->rx_buf, uport, rx_bytes);
 
 	if (drop_rx)
 		goto exit_handle_dma_rx;
@@ -2906,11 +2879,24 @@ static int msm_geni_console_setup(struct console *co, char *options)
 
 static int console_register(struct uart_driver *drv)
 {
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if(!ext_boot_with_console()){
+		return 0;
+	}
+	#endif
+
 	return uart_register_driver(drv);
+
 }
 
 static void console_unregister(struct uart_driver *drv)
 {
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if(!ext_boot_with_console()){
+		return ;
+	}
+	#endif
+
 	uart_unregister_driver(drv);
 }
 

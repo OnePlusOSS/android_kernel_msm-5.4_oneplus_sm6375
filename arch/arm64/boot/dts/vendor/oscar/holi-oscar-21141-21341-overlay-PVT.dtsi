@@ -1,0 +1,29 @@
+
+&adsp_mem {
+    compatible = "removed-dma-pool";
+    no-map;
+    /delete-property/ reusable;
+    size = <0 0xC00000>;
+};
+
+&holi_snd {
+    oplus,mbhc-check-irq-en = <1>;
+};
+
+&soc {
+    gpio_keys {
+        vol_down {
+	    linux,code = <KEY_VOLUMEDOWN>;
+        };
+    };
+};
+
+&spmi_bus {
+    qcom,pm6125@0 {
+        qcom,power-on@800 {
+	    qcom,pon_2 {
+                linux,code = <KEY_VOLUMEUP>;
+            };
+        };
+    };
+};

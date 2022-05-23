@@ -149,9 +149,18 @@
 #define PSY_IIO_PARALLEL_BATFET_MODE		0x79
 #define PSY_IIO_PARALLEL_FCC_MAX		0x7a
 
+//#ifdef OPLUS_FEATURE_CHG_BASIC
+#define PSY_IIO_PD_SDP				0xa0
+//#endif
+
 /* USB */
 #define PSY_IIO_MOISTURE_DETECTION_EN		0x7b
 
 /* BMS */
 #define PSY_IIO_CLEAR_SOH			0x7c
+
+//#ifdef OPLUS_FEATURE_CHG_BASIC
+#define PSY_IIO_PD_SDP				0xa0
+//#endif
+
 #endif /* __QTI_POWER_SUPPLY_IIO_H__ */

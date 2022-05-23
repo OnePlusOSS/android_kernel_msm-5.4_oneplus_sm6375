@@ -84,7 +84,7 @@ obj-$(CONFIG_REGULATOR_MT6323)	+= mt6323-regulator.o
 obj-$(CONFIG_REGULATOR_MT6358)	+= mt6358-regulator.o
 obj-$(CONFIG_REGULATOR_MT6380)	+= mt6380-regulator.o
 obj-$(CONFIG_REGULATOR_MT6397)	+= mt6397-regulator.o
-obj-$(CONFIG_REGULATOR_QCOM_PM8008) += qcom_pm8008-regulator.o
+# obj-$(CONFIG_REGULATOR_QCOM_PM8008) += qcom_pm8008-regulator.o
 obj-$(CONFIG_REGULATOR_QCOM_RPM) += qcom_rpm-regulator.o
 obj-$(CONFIG_REGULATOR_QCOM_RPMH) += qcom-rpmh-regulator.o
 obj-$(CONFIG_REGULATOR_QCOM_SMD_RPM) += qcom_smd-regulator.o
@@ -150,5 +150,6 @@ obj-$(CONFIG_REGULATOR_REFGEN) += refgen.o
 obj-$(CONFIG_REGULATOR_RPMH) += rpmh-regulator.o
 obj-$(CONFIG_REGULATOR_STUB) += stub-regulator.o
 obj-$(CONFIG_VIRTIO_REGULATOR) += virtio_regulator.o
+obj-$(CONFIG_REGULATOR_OPLUS_FAN53870) +=  oplus_camera_fan53870.o
 
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG

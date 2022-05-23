@@ -51,6 +51,7 @@
 #include "ufs-sysfs.h"
 #include "ufs_bsg.h"
 #include "ufshcd-crypto.h"
+#include <trace/hooks/oplus_ufs.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs.h>
@@ -2605,9 +2606,16 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		BUG();
 	}
 
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+	if (!down_read_trylock(&hba->clk_scaling_lock)) {
+		hba->ufs_stats.scsi_blk_reqs.ts = ktime_get();
+		hba->ufs_stats.scsi_blk_reqs.busy_ctx = SCALING_BUSY;
+		return SCSI_MLQUEUE_HOST_BUSY;
+	}
+#else
 	if (!down_read_trylock(&hba->clk_scaling_lock))
 		return SCSI_MLQUEUE_HOST_BUSY;
-
+#endif /*CONFIG_OPLUS_UFS_DRIVER*/
 	hba->req_abort_count = 0;
 
 	/* acquire the tag to make sure device cmds don't use it */
@@ -2618,12 +2626,20 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		 * find different tag instead of waiting for dev manage command
 		 * completion.
 		 */
+	#ifdef CONFIG_OPLUS_UFS_DRIVER
+		hba->ufs_stats.scsi_blk_reqs.ts = ktime_get();
+		hba->ufs_stats.scsi_blk_reqs.busy_ctx = LRB_IN_USE;
+	#endif
 		err = SCSI_MLQUEUE_HOST_BUSY;
 		goto out;
 	}
 
 	err = ufshcd_hold(hba, true);
 	if (err) {
+	#ifdef CONFIG_OPLUS_UFS_DRIVER
+		hba->ufs_stats.scsi_blk_reqs.ts = ktime_get();
+		hba->ufs_stats.scsi_blk_reqs.busy_ctx = UFSHCD_HOLD;
+	#endif
 		err = SCSI_MLQUEUE_HOST_BUSY;
 		clear_bit_unlock(tag, &hba->lrb_in_use);
 		goto out;
@@ -2685,6 +2701,10 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		}
 		fallthrough;
 	case UFSHCD_STATE_RESET:
+	#ifdef CONFIG_OPLUS_UFS_DRIVER
+		hba->ufs_stats.scsi_blk_reqs.ts = ktime_get();
+		hba->ufs_stats.scsi_blk_reqs.busy_ctx = UFS_RESET_OR_EH_SCHEDULED;
+	#endif
 		err = SCSI_MLQUEUE_HOST_BUSY;
 		goto out_compl_cmd;
 	case UFSHCD_STATE_ERROR:
@@ -7218,11 +7238,22 @@ static int ufshcd_set_low_vcc_level(struct ufs_hba *hba)
  * Returns zero on success (all required W-LUs are added successfully),
  * non-zero error value on failure (if failed to add any of the required W-LU).
  */
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+int __attribute__((weak)) register_device_proc(char *name, char *version, char *vendor)
+{
+	return 0;
+}
+#endif
 static int ufshcd_scsi_add_wlus(struct ufs_hba *hba)
 {
 	int ret = 0;
 	struct scsi_device *sdev_rpmb;
 	struct scsi_device *sdev_boot;
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+		static char temp_version[5] = {0};
+		static char vendor[9] = {0};
+		static char model[17] = {0};
+#endif
 
 	hba->sdev_ufs_device = __scsi_add_device(hba->host, 0, 0,
 		ufshcd_upiu_wlun_to_scsi_wlun(UFS_UPIU_UFS_DEVICE_WLUN), NULL);
@@ -7256,6 +7287,14 @@ static int ufshcd_scsi_add_wlus(struct ufs_hba *hba)
 remove_sdev_ufs_device:
 	scsi_remove_device(hba->sdev_ufs_device);
 out:
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+	strncpy(temp_version, hba->sdev_ufs_device->rev, 4);
+	strncpy(vendor, hba->sdev_ufs_device->vendor, 8);
+	strncpy(model, hba->sdev_ufs_device->model, 16);
+	register_device_proc("ufs_version", temp_version, vendor);
+	register_device_proc("ufs", model, vendor);
+#endif
+	trace_android_vh_ufs_gen_proc_devinfo(hba);
 	return ret;
 }
 
