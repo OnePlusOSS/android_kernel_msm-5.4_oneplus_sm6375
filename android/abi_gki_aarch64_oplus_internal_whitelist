@@ -101,7 +101,6 @@
 #endif /*OPLUS_FEATURE_CHG_BASIC*/
 
 #ifdef OPLUS_FEATURE_FINGERPRINT
-#Bangxiong.Wu@BSP.Fingerprint.Basic 2020/08/21 add for fingerprint GKI
   devm_gpio_free
   wakeup_source_remove
   wakeup_source_add

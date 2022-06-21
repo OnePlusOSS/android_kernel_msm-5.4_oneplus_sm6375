@@ -264,7 +264,8 @@ static void parse_light_sensor_dts(struct sensor_hw *hw, struct device_node *ch_
 		"is_als_initialed",
 		"als_buffer_length",
 		"normalization_value",
-		"use_lb_algo"
+		"use_lb_algo",
+		"als_ratio_type"
 	};
 
 	char *light_para[] = {
@@ -302,6 +303,8 @@ static void parse_light_sensor_dts(struct sensor_hw *hw, struct device_node *ch_
 			hw->feature.parameter[di] = value;
 		} else if (0 == strncmp(light_para[di], "gold-reset-scale", strlen("gold-reset-scale"))) {
 			hw->feature.parameter[di] = 1001; /* set defaut value 1001 */
+		} else if (0 == strncmp(als_feature[di], "als_ratio_type", strlen("als_ratio_type"))) {
+			hw->feature.feature[di] = 0;   /*set defaut zero*/
 		} else {
 			hw->feature.parameter[di] = 0; /* set defaut param */
 			pr_info("parse %s failed!", light_para[di]);

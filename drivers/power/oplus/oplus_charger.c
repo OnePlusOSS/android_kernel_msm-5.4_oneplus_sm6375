@@ -8798,9 +8798,12 @@ static void oplus_chg_pdqc_to_normal(struct oplus_chg_chip *chip)
 	}
 }
 
+#define QC_CHARGER_VOLTAGE_HIGH 7500
+#define QC_ABNORMAL_CHECK_COUNT 3
+
 static void oplus_chg_qc_config(struct oplus_chg_chip *chip)
 {
-	static int qc_chging = false;
+	static bool qc_chging = false;
 	int ret = 0;
 
 	if (chip->charger_type != POWER_SUPPLY_TYPE_USB_DCP) {
@@ -8811,56 +8814,64 @@ static void oplus_chg_qc_config(struct oplus_chg_chip *chip)
 		return;
 	chg_err("chip->charger_type[%d], subtype[%d]\n",
 		chip->charger_type, chip->chg_ops->get_charger_subtype());
+	if (!chip->cool_down_force_5v) {
+		if (qc_chging == true && (chip->charger_volt < QC_CHARGER_VOLTAGE_HIGH)) {
+			chip->qc_abnormal_check_count++;
+			if (chip->qc_abnormal_check_count >= QC_ABNORMAL_CHECK_COUNT) {
+				if (chip->chg_ops->pdo_5v && chip->qc_abnormal_check_count == QC_ABNORMAL_CHECK_COUNT) {
+					chip->chg_ops->pdo_5v();
+					chg_err("Abnormal qc adapter.Do not config qc to 9V\n");
 
-	if (qc_chging == true && (chip->charger_volt < 7500)) {
-		chip->qc_abnormal_check_count++;
-		if (chip->qc_abnormal_check_count >= 3) {
-			if (chip->chg_ops->pdo_5v && chip->qc_abnormal_check_count == 3) {
-				chip->chg_ops->pdo_5v();
-				chg_err("Abnormal qc adapter.Do not config qc to 9V\n");
-
-				chip->limits.temp_normal_fastchg_current_ma
-					= chip->limits.default_temp_normal_fastchg_current_ma;
-				chip->limits.temp_little_cool_fastchg_current_ma
-					= chip->limits.default_temp_little_cool_fastchg_current_ma;
-				chip->limits.temp_little_cool_fastchg_current_ma_high
-					= chip->limits.default_temp_little_cool_fastchg_current_ma_high;
-				chip->limits.temp_little_cool_fastchg_current_ma_low
-					= chip->limits.default_temp_little_cool_fastchg_current_ma_low;
-				chip->limits.temp_little_cold_fastchg_current_ma_high
-					= chip->limits.default_temp_little_cold_fastchg_current_ma_high;
-				chip->limits.temp_little_cold_fastchg_current_ma_low
-					= chip->limits.default_temp_little_cold_fastchg_current_ma_low;
-				chip->limits.temp_cold_fastchg_current_ma_high
-					= chip->limits.default_temp_cold_fastchg_current_ma_high;
-				chip->limits.temp_cold_fastchg_current_ma_low
-					= chip->limits.default_temp_cold_fastchg_current_ma_low;
-				chip->limits.temp_cool_fastchg_current_ma_high
-					= chip->limits.default_temp_cool_fastchg_current_ma_high;
-				chip->limits.temp_cool_fastchg_current_ma_low
-					= chip->limits.default_temp_cool_fastchg_current_ma_low;
-				chip->limits.temp_warm_fastchg_current_ma
-					= chip->limits.default_temp_warm_fastchg_current_ma;
-				chip->limits.input_current_charger_ma
-					= chip->limits.default_input_current_charger_ma;
-				oplus_chg_set_charging_current(chip);
-				oplus_chg_set_input_current_limit(chip);
-				oplus_chg_enable_burst_mode(true);
+					chip->limits.temp_normal_fastchg_current_ma
+						= chip->limits.default_temp_normal_fastchg_current_ma;
+					chip->limits.temp_little_cool_fastchg_current_ma
+						= chip->limits.default_temp_little_cool_fastchg_current_ma;
+					chip->limits.temp_little_cool_fastchg_current_ma_high
+						= chip->limits.default_temp_little_cool_fastchg_current_ma_high;
+					chip->limits.temp_little_cool_fastchg_current_ma_low
+						= chip->limits.default_temp_little_cool_fastchg_current_ma_low;
+					chip->limits.temp_little_cold_fastchg_current_ma_high
+						= chip->limits.default_temp_little_cold_fastchg_current_ma_high;
+					chip->limits.temp_little_cold_fastchg_current_ma_low
+						= chip->limits.default_temp_little_cold_fastchg_current_ma_low;
+					chip->limits.temp_cold_fastchg_current_ma_high
+						= chip->limits.default_temp_cold_fastchg_current_ma_high;
+					chip->limits.temp_cold_fastchg_current_ma_low
+						= chip->limits.default_temp_cold_fastchg_current_ma_low;
+					chip->limits.temp_cool_fastchg_current_ma_high
+						= chip->limits.default_temp_cool_fastchg_current_ma_high;
+					chip->limits.temp_cool_fastchg_current_ma_low
+						= chip->limits.default_temp_cool_fastchg_current_ma_low;
+					chip->limits.temp_warm_fastchg_current_ma
+						= chip->limits.default_temp_warm_fastchg_current_ma;
+					chip->limits.input_current_charger_ma
+						= chip->limits.default_input_current_charger_ma;
+					oplus_chg_set_charging_current(chip);
+					oplus_chg_set_input_current_limit(chip);
+					oplus_chg_enable_burst_mode(true);
 #ifndef CONFIG_OPLUS_CHARGER_MTK
-				if (chip->chg_ops->rerun_aicl) {
-					chip->chg_ops->rerun_aicl();
-					chg_err("Abnormal qc adapter.rerun aicl after set 5V\n");
-				}
+					if (chip->chg_ops->rerun_aicl) {
+						chip->chg_ops->rerun_aicl();
+						chg_err("Abnormal qc adapter.rerun aicl after set 5V\n");
+					}
 #endif
+				}
+				return;
 			}
-			return;
+		} else {
+			chip->qc_abnormal_check_count = 0;
 		}
-	} else {
-		chip->qc_abnormal_check_count = 0;
 	}
 
-	if (qc_chging == false
-			&& chip->chg_ops->get_charger_subtype() == CHARGER_SUBTYPE_QC) {
+	if (chip->vbatt_num == 1) {
+		if (chip->chg_ops->check_qchv_condition && chip->chg_ops->check_qchv_condition()
+			&& chip->qc_abnormal_check_count < QC_ABNORMAL_CHECK_COUNT && qc_chging && chip->charger_volt < QC_CHARGER_VOLTAGE_HIGH) {
+			chg_err("QC can recovery to HV");
+			qc_chging = false;
+		}
+	}
+
+	if (!qc_chging && chip->chg_ops->get_charger_subtype() == CHARGER_SUBTYPE_QC) {
 		ret = chip->chg_ops->set_qc_config();
 		if (ret >= 0) {
 			qc_chging = true;

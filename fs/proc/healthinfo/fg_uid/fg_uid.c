@@ -106,9 +106,8 @@ static int __init fg_uids_init(void)
 
 static  void __exit fg_uids_exit(void)
 {
-	if (!fg_dir) {
+	if (!fg_dir)
 		return;
-	}
 
 	remove_proc_entry(FS_FG_UIDS, fg_dir);
 }

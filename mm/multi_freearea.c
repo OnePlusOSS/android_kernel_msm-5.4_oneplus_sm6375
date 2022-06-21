@@ -216,7 +216,8 @@ void ajust_zone_label(struct zone *zone)
 		else
 			prev_base = zone->zone_label[i - 1].label;
 
-		zone->zone_label[i].segment = prev_base + ((zone->zone_label[i].label - prev_base) >> 1);
+		zone->zone_label[i].segment = prev_base +
+			((zone->zone_label[i].label - prev_base) >> 1);
 	}
 }
 

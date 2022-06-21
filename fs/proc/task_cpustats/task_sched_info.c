@@ -26,7 +26,7 @@
 #define MAX_PID_NUM 10
 #define BUFFER_SIZE 3840
 #define NOTIFY_SIZE 2560
-#define DURATION_THRESHOLD 16777215
+#define DT 16777215
 #define CPU_NUM 8
 #define NUM_LEN 21
 #define SYSTEM_SERVER_NAME "SS"
@@ -222,8 +222,8 @@ void update_task_sched_info(struct task_struct *p, u64 delay, int type, int cpu)
 		wake_tid = p->wake_tid;
 		cur_sched_clock = sched_clock_cpu(cpu);
 		delay = delay >> 20;
-		if (delay > DURATION_THRESHOLD)
-			delay = DURATION_THRESHOLD;
+		if (delay > DT)
+			delay = DT;
 
 		switch(type) {
 		case task_sched_info_running:

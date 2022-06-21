@@ -4423,6 +4423,12 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		DSI_ERR("failed to parse power config, rc=%d\n", rc);
 
+#ifdef OPLUS_BUG_STABILITY
+	rc = dsi_panel_parse_panel_power_cfg(panel);
+	if (rc)
+		DSI_DEBUG("failed to parse panel_power config, rc=%d\n", rc);
+#endif
+
 	rc = dsi_panel_parse_bl_config(panel);
 	if (rc) {
 		DSI_ERR("failed to parse backlight config, rc=%d\n", rc);

@@ -1300,8 +1300,8 @@ static int sgm7220_probe(struct i2c_client *client, const struct i2c_device_id *
 		goto err_enable_irq;
 	}
 	gchip = info;
-	sgm7220_irq_thread(0, info);
 	sgm7220_set_typec_sinkonly();
+	sgm7220_irq_thread(0, info);
 	pr_err("[%s] probe success!!\n", __func__);
 	return 0;
 

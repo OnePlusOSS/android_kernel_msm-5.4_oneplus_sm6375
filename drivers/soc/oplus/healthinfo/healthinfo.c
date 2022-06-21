@@ -1115,7 +1115,7 @@ static int __init healthinfo_init(void)
 #endif /* CONFIG_OPLUS_BLK_MONITOR */
 
 	pentry = proc_create("cpu_info", S_IRUGO, healthinfo, &proc_cpu_info_fops);
-	if (!pentry) {
+	if(!pentry) {
 		ohm_err("create cpu info proc failed.\n");
 		goto ERROR_INIT_VERSION;
 	}

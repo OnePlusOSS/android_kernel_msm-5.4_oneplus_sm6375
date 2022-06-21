@@ -35,7 +35,6 @@ source "drivers/soc/oplus/device_info/Kconfig"
 #endif /*OPLUS_FEATURE_TP_BASIC*/
 
 #ifdef OPLUS_FEATURE_SENSOR_SMEM
-#qiuzuolin@BSP.Sensor.Basic 2020/07/31 add for oplus sensor smem
 source "drivers/soc/oplus/sensor/Kconfig"
 #endif /* OPLUS_FEATURE_SENSOR_SMEM */
 

@@ -189,7 +189,6 @@ static int32_t cam_sensor_driver_i2c_probe(struct i2c_client *client,
 	int i = 0;
 	struct cam_sensor_ctrl_t *s_ctrl = NULL;
 	struct cam_hw_soc_info   *soc_info = NULL;
-	CAM_ERR(CAM_SENSOR,"zpf cam_sensor_driver_i2c_probe enter");
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		CAM_ERR(CAM_SENSOR,
@@ -454,7 +453,6 @@ static int32_t cam_sensor_driver_platform_probe(
 	int rc = 0;
 
 	CAM_DBG(CAM_SENSOR, "Adding Sensor component");
-	CAM_ERR(CAM_SENSOR,"zpf cam_sensor_driver_platform_probe enter");
 
 	rc = component_add(&pdev->dev, &cam_sensor_component_ops);
 	if (rc)

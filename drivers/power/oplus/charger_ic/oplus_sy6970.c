@@ -66,6 +66,9 @@ extern int oplus_chg_backup_soc(int backup_soc);
 extern int oplus_sm8150_get_pd_type(void);
 extern int oplus_chg_set_pd_config(void);
 extern void oplus_get_usbtemp_volt(struct oplus_chg_chip *chip);
+extern void oplus_set_typec_sinkonly(void);
+extern void oplus_set_typec_cc_open(void);
+extern bool oplus_chg_check_qchv_condition(void);
 #endif
 
 extern void oplus_wake_up_usbtemp_thread(void);
@@ -2461,16 +2464,21 @@ static int sy6970_enter_ship_mode(struct sy6970 *bq, bool en)
 	int ret;
 	u8 val;
 
-	if (en)
+	if (en) {
+		val = SY6970_BATFET_OFF_IMMEDIATELY;
+		val <<= REG09_SY6970_BATFET_DLY_SHIFT;
+		ret = sy6970_update_bits(bq, SY6970_REG_09,
+						SY6970_BATFET_DLY_MASK, val);
+
 		val = SY6970_BATFET_OFF;
-
-	else
+		val <<= SY6970_BATFET_DIS_SHIFT;
+		ret = sy6970_update_bits(bq, SY6970_REG_09,
+						SY6970_BATFET_DIS_MASK, val);
+	} else {
 		val = SY6970_BATFET_ON;
-
-	val <<= SY6970_BATFET_DIS_SHIFT;
-
-	ret = sy6970_update_bits(bq, SY6970_REG_09,
-				 SY6970_BATFET_DIS_MASK, val);
+		ret = sy6970_update_bits(bq, SY6970_REG_09,
+						SY6970_BATFET_DIS_MASK, val);
+	}
 	return ret;
 
 }
@@ -3569,6 +3577,9 @@ struct oplus_chg_operations  oplus_chg_sy6970_ops = {
 	.oplus_chg_set_hz_mode = sy6970_set_hz_mode,
 	.oplus_usbtemp_monitor_condition = oplus_usbtemp_condition,
 	.get_usbtemp_volt = oplus_get_usbtemp_volt,
+	.set_typec_sinkonly = oplus_set_typec_sinkonly,
+	.set_typec_cc_open = oplus_set_typec_cc_open,
+	.check_qchv_condition = oplus_chg_check_qchv_condition,
 };
 
 static void retry_detection_work_callback(struct work_struct *work)

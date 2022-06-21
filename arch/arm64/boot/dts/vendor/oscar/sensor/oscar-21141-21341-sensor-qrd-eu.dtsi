@@ -4,8 +4,8 @@
 			als-row-coe = <360>;
 			/*enum {LSM6DSM = 0x01, BMI160 = 0x02, LSM6DS3 = 0x04, BMI260 = 0x08};*/
 			gsensor@0 {
-					sensor-name = <0x08>;//BMI260
-					sensor-direction = <5>;
+					sensor-name = <0x80>;//BMI320
+					sensor-direction = <6>;
 					sensor-index = <0>;//source num
 					sensor-type = <0>;//OPLUS_ACCEL
 			};
@@ -48,6 +48,7 @@
 					als_buffer_length = <10>;
 					//normalization_value = <549>;
 					use_lb_algo = <0>;
+					als_ratio_type = <2>; // use for stk33502 to split light, <0:type old; 1:type abcde; 2:type accordance>
 			};
 			psensor@0 {
 				    sensor-name = <0x01>;//STK3A5X

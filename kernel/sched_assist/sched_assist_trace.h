@@ -1,10 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0-only
- *
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
  * Copyright (C) 2020 Oplus. All rights reserved.
  */
 
-#ifndef SCHED_ASSIST_TRACE_H
-#define SCHED_ASSIST_TRACE_H
 
 #if !defined(_OPLUS_SCHED_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _OPLUS_SCHED_TRACE_H
@@ -23,11 +21,13 @@ TRACE_EVENT(oplus_tp_sched_change_ux,
 
 	TP_STRUCT__entry(
 		__field(int, chg_ux)
-		__field(int, target_cpu)),
+		__field(int, target_cpu)
+	),
 
 	TP_fast_assign(
 		__entry->chg_ux = chg_ux;
-		__entry->target_cpu = target_cpu;),
+		__entry->target_cpu = target_cpu;
+	),
 
 	TP_printk("chg_ux=%d target_cpu=%d", __entry->chg_ux, __entry->target_cpu)
 );
@@ -40,11 +40,13 @@ TRACE_EVENT(oplus_tp_sched_switch_ux,
 
 	TP_STRUCT__entry(
 		__field(int, chg_ux)
-		__field(int, target_cpu)),
+		__field(int, target_cpu)
+	),
 
 	TP_fast_assign(
 		__entry->chg_ux = chg_ux;
-		__entry->target_cpu = target_cpu;),
+		__entry->target_cpu = target_cpu;
+	),
 
 	TP_printk("chg_ux=%d target_cpu=%d", __entry->chg_ux, __entry->target_cpu)
 );
@@ -97,5 +99,3 @@ TRACE_EVENT(sched_assist_spread_tasks,
 #undef TRACE_INCLUDE_PATH
 #define TRACE_INCLUDE_PATH .
 #include <trace/define_trace.h>
-
-#endif /* SCHED_ASSIST_TRACE_H */

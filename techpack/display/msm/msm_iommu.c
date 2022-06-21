@@ -40,7 +40,7 @@ static int msm_fault_handler(struct iommu_domain *domain, struct device *dev,
 
 #ifdef OPLUS_BUG_STABILITY
 #ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
-	mm_fb_display_kevent("SMMU msm fault", MM_FB_KEY_RATELIMIT_1H, "iova=%08lx flags=%d", iova, flags);
+	mm_fb_display_kevent("DisplayDriverID@@404$$", MM_FB_KEY_RATELIMIT_1H, "SMMU msm fault iova=%08lx flags=%d", iova, flags);
 #endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
  #endif /*OPLUS_BUG_STABILITY*/
 

@@ -733,6 +733,9 @@ int cam_flash_i2c_apply_setting(struct cam_flash_ctrl *fctrl,
 	struct i2c_settings_list *i2c_list;
 	struct i2c_settings_array *i2c_set = NULL;
 	int frame_offset = 0, rc = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint32_t data = 0;
+#endif
 	CAM_DBG(CAM_FLASH, "req_id=%llu", req_id);
 	if (req_id == 0) {
 		/* NonRealTime Init settings*/
@@ -795,6 +798,14 @@ int cam_flash_i2c_apply_setting(struct cam_flash_ctrl *fctrl,
 		i2c_set = &fctrl->i2c_data.per_frame[frame_offset];
 		if ((i2c_set->is_settings_valid == true) &&
 			(i2c_set->request_id == req_id)) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if(!strcmp(fctrl->flash_name, "i2c_flash")) {
+			rc = camera_io_dev_read(&(fctrl->io_master_info),
+				0x0A, &data, 1, 1);
+			rc = camera_io_dev_read(&(fctrl->io_master_info),
+				0x0B, &data, 1, 1);
+		}
+#endif
 			list_for_each_entry(i2c_list,
 				&(i2c_set->list_head), list) {
 				rc = cam_sensor_util_i2c_apply_setting(

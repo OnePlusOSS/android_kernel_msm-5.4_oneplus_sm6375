@@ -112,6 +112,9 @@ static int cam_ftm_i2c_torch_on(struct cam_flash_ctrl *flash_ctrl, struct cam_fl
 	struct cam_flash_ftm_reg_setting *torch_on_setting = &(flash_ftm_data->flashlowsettings);
 	struct cam_flash_ftm_reg_setting *init_setting = &(flash_ftm_data->flashinitsettings);
 	struct cam_sensor_i2c_reg_setting write_setting;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint32_t data = 0;
+#endif
 
 	if (!power_on_setting || !init_setting || !torch_on_setting) {
 		CAM_ERR(CAM_FLASH,"Ftm torch on failed, Empty setting");
@@ -150,6 +153,14 @@ static int cam_ftm_i2c_torch_on(struct cam_flash_ctrl *flash_ctrl, struct cam_fl
 		}
 	}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if(!strcmp(flash_ctrl->flash_name, "i2c_flash")) {
+		rc = camera_io_dev_read(&(flash_ctrl->io_master_info),
+			0x0A, &data, 1, 1);
+		rc = camera_io_dev_read(&(flash_ctrl->io_master_info),
+			0x0B, &data, 1, 1);
+	}
+#endif
 	//2.init setting
 	if (init_setting != NULL) {
 		write_setting.reg_setting = init_setting->reg_setting;
@@ -193,6 +204,9 @@ static int cam_ftm_i2c_flash_on(struct cam_flash_ctrl *flash_ctrl, struct cam_fl
 	struct cam_flash_ftm_reg_setting *flash_on_setting = &(flash_ftm_data->flashhighsettings);
 	struct cam_flash_ftm_reg_setting *init_setting = &(flash_ftm_data->flashinitsettings);
 	struct cam_sensor_i2c_reg_setting write_setting;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint32_t data = 0;
+#endif
 
 	if (!power_on_setting || !init_setting || !flash_on_setting) {
 		CAM_ERR(CAM_FLASH,"Ftm flash on failed, Empty setting");
@@ -230,6 +244,14 @@ static int cam_ftm_i2c_flash_on(struct cam_flash_ctrl *flash_ctrl, struct cam_fl
 		}
 	}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if(!strcmp(flash_ctrl->flash_name, "i2c_flash")) {
+		rc = camera_io_dev_read(&(flash_ctrl->io_master_info),
+			0x0A, &data, 1, 1);
+		rc = camera_io_dev_read(&(flash_ctrl->io_master_info),
+			0x0B, &data, 1, 1);
+	}
+#endif
 	//2.init setting
 	if (init_setting != NULL) {
 		write_setting.reg_setting = init_setting->reg_setting;

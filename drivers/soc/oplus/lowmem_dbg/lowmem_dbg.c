@@ -60,7 +60,7 @@ static int lowmem_dbg_ram[] = {
 static int lowmem_dbg_low[] = {
 	64 * 1024,	/* 256MB */
 	128 * 1024,	/* 512MB */
-	256 * 1024,	/* 1024MB */
+	192 * 1024,	/* 768MB */
 };
 
 static void lowmem_dbg_dump(struct work_struct *work);
@@ -794,7 +794,7 @@ static __init int oplus_lowmem_dbg_init(void)
 	struct lowmem_dbg_cfg *pcfg = &dbg_cfg;
 
 	/* This is a process holding an application service */
-	pcfg->dump_interval = 15 * HZ;
+	pcfg->dump_interval = 30 * HZ;
 
 	/* init watermark */
 	pcfg->wms[MEM_ION_USED] = SZ_2G >> PAGE_SHIFT;

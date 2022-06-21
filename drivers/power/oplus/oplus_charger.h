@@ -1005,6 +1005,7 @@ struct oplus_chg_operations {
 	void (*vooc_timeout_callback)(bool);
 	void (*force_pd_to_dcp)(void);
 	bool (*get_otg_enable)(void);
+	bool (*check_qchv_condition)(void);
 };
 
 int __attribute__((weak)) ppm_sys_boost_min_cpu_freq_set(int freq_min,

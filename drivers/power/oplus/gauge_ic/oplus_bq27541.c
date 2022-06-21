@@ -100,6 +100,7 @@ int __attribute__((weak)) get_subboard_ntc_temperature(void)
 	return DEFAULT_BOART_TEMP;
 }
 
+
 /**********************************************************
   *
   *   [I2C Function For Read/Write bq27541]
@@ -1133,6 +1134,7 @@ static int bq28z610_get_battery_balancing_status(void)
 {
 	return batt_balancing_config;
 }
+#define ERROR_BATT_TEMP -400
 static int bq27541_get_battery_temperature(void)
 {
 	int ret = 0;
@@ -1148,8 +1150,10 @@ static int bq27541_get_battery_temperature(void)
 	if (!gauge_ic) {
 		return 0;
 	}
-
 	if(gauge_ic->use_subboard_temp) {
+		if(gauge_i2c_err != 0) {
+			return ERROR_BATT_TEMP;
+		}
 		temp = get_subboard_ntc_temperature();
 		return temp;
 	}
@@ -2120,12 +2124,11 @@ static void bq27541_parse_dt(struct chip_bq27541 *chip)
 	chip->bq28z610_need_balancing = of_property_read_bool(node, "qcom,bq28z610_need_balancing");
 	chip->battery_full_param = of_property_read_bool(node, "qcom,battery-full-param");//only for wite battery full param in guage dirver probe on 7250 platform
 	rc = of_property_read_u32(node, "qcom,gauge_num", &chip->gauge_num);
+	chip->use_subboard_temp = of_property_read_bool(node, "qcom,use_subboard_temp");
+
 	if(rc) {
 		chip->gauge_num = 0;
 	}
-
-	chip->use_subboard_temp = of_property_read_bool(node, "qcom,use_subboard_temp");
-
 	rc = of_property_read_u32(node, "qcom,sha1_key_index", &chip->sha1_key_index);
 	if(rc) {
 		chip->sha1_key_index = 0;

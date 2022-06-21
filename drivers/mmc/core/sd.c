@@ -1564,6 +1564,7 @@ err:
 	mmc_detach_bus(host);
 
 #ifdef CONFIG_EMMC_SDCARD_OPTIMIZE
+    if (err)
     host->detect_change_retry--;
     pr_err("detect_change_retry = %d !!!,err = %d\n", host->detect_change_retry,err);
 #endif /* CONFIG_EMMC_SDCARD_OPTIMIZE */

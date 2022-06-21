@@ -642,6 +642,8 @@ static void smbchg_enter_shipmode(struct oplus_chg_chip *chip)
 	} else {
 		if(chg->sy6974b_shipmode_enable) {
 			oplus_sy6974b_enter_shipmode(g_oplus_chip->enable_shipmode);
+		} else if (chip->chg_ops->enable_shipmode != NULL) {
+			chip->chg_ops->enable_shipmode(g_oplus_chip->enable_shipmode);
 		}
 	}
 #endif
@@ -915,6 +917,27 @@ bool oplus_ccdetect_check_is_gpio(struct oplus_chg_chip *chip)
 
 	if (gpio_is_valid(chg->ccdetect_gpio))
 		return true;
+
+	return false;
+}
+
+#define QC_CHARGER_VOLTAGE_HIGH 7500
+#define QC_SOC_HIGH 90
+#define QC_TEMP_HIGH 420
+bool oplus_chg_check_qchv_condition(void)
+{
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (!chip) {
+		pr_err("oplus_chip is null\n");
+		return false;
+	}
+
+	chip->charger_volt = chip->chg_ops->get_charger_volt();
+	if (chip->dual_charger_support && chip->charger_volt < QC_CHARGER_VOLTAGE_HIGH
+		&& chip->soc < QC_SOC_HIGH && chip->temperature <= QC_TEMP_HIGH && !chip->cool_down_force_5v) {
+		return true;
+	}
 
 	return false;
 }

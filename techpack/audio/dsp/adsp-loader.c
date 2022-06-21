@@ -19,7 +19,6 @@
 #include <soc/qcom/boot_stats.h>
 #include <soc/qcom/subsystem_restart.h>
 //ifdef OPLUS_FEATURE_SENSOR_DRIVER
-//tangweiqin@BSP,Sensor,20201216,modify for sensor 1.8v always on
 #include <linux/regulator/consumer.h>
 //endif
 #define Q6_PIL_GET_DELAY_MS 100
@@ -114,7 +113,6 @@ static void adsp_load_fw(struct work_struct *adsp_ldr_work)
 	const char *img_name;
 	void *padsp_restart_cb = &adsp_load_state_notify_cb;
 //ifdef OPLUS_FEATURE_SENSOR_DRIVER
-//tangweiqin@BSP,Sensor,20201216,modify for sensor 1.8v always on
 	struct regulator *vdd_1v8 = NULL;
 //endif
 	if (!pdev) {
@@ -129,7 +127,6 @@ static void adsp_load_fw(struct work_struct *adsp_ldr_work)
 	}
 
 //ifdef OPLUS_FEATURE_SENSOR_DRIVER
-//tangweiqin@BSP,Sensor,20201216,modify for sensor 1.8v always on
 	vdd_1v8 = regulator_get(&pdev->dev, "vddio");
 
 	if (vdd_1v8 != NULL)

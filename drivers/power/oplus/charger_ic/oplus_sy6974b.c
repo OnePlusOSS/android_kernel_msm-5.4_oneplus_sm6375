@@ -271,12 +271,6 @@ int oplus_sy6974b_enter_shipmode(bool en)
 
 	chg_err("enter ship_mode:en:%d\n", en);
 
-	/*Turn off BATFET immediately*/
-	if(en) {
-		val = SY6974_BATFET_OFF_IMMEDIATELY << REG07_SY6974B_BATFET_DLY_SHIFT;
-		rc = sy6974b_config_interface(chip, REG07_SY6974B_ADDRESS, val, REG07_SY6974B_BATFET_DLY_MASK);
-	}
-
 	if(en) {
 		val = SY6974_BATFET_OFF << REG07_SY6974B_BATFET_DIS_SHIFT;
 	} else {

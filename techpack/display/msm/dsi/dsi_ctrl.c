@@ -49,8 +49,7 @@
 
 #ifdef OPLUS_BUG_STABILITY
 #ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
-#undef DSI_CTRL_ERR
-#define DSI_CTRL_ERR(c, fmt, ...) \
+#define DSI_CTRL_MM_ERR(c, fmt, ...) \
 	do { \
 		DRM_DEV_ERROR(NULL, "[msm-dsi-error]: %s: "\
 				fmt, c ? c->name : "inv", ##__VA_ARGS__); \
@@ -452,9 +451,9 @@ static void dsi_ctrl_dma_cmd_wait_for_done(struct work_struct *work)
 				dsi_ctrl_disable_status_interrupt(dsi_ctrl,
 						DSI_SINT_CMD_MODE_DMA_DONE);
 
-				mm_fb_display_kevent("dma_tx irq trigger fixup", MM_FB_KEY_RATELIMIT_NONE, "irq status=%x", status);
+				mm_fb_display_kevent("DisplayDriverID@@405$$", MM_FB_KEY_RATELIMIT_NONE, "dma_tx irq trigger fixup irq status=%x", status);
 			}
-			mm_fb_display_kevent("dma_tx irq trigger err", MM_FB_KEY_RATELIMIT_1H, "irq status=%x", status);
+			mm_fb_display_kevent("DisplayDriverID@@413$$", MM_FB_KEY_RATELIMIT_1H, "dma_tx irq trigger err irq status=%x", status);
 #endif //CONFIG_OPLUS_FEATURE_MM_FEEDBACK
 #endif /* OPLUS_BUG_STABILITY */
 
@@ -1098,6 +1097,11 @@ static int dsi_ctrl_enable_supplies(struct dsi_ctrl *dsi_ctrl, bool enable)
 		if (rc < 0) {
 			DSI_CTRL_ERR(dsi_ctrl,
 				"Power resource enable failed, rc=%d\n", rc);
+#ifdef OPLUS_BUG_STABILITY
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+			DSI_CTRL_MM_ERR(dsi_ctrl, "DisplayDriverID@@406$$Power resource enable failed, rc=%d\n", rc);
+#endif
+#endif
 			goto error;
 		}
 
@@ -1106,6 +1110,11 @@ static int dsi_ctrl_enable_supplies(struct dsi_ctrl *dsi_ctrl, bool enable)
 				&dsi_ctrl->pwr_info.host_pwr, true);
 			if (rc) {
 				DSI_CTRL_ERR(dsi_ctrl, "failed to enable host power regs\n");
+#ifdef OPLUS_BUG_STABILITY
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+				DSI_CTRL_MM_ERR(dsi_ctrl, "DisplayDriverID@@406$$failed to enable host power regs\n");
+#endif
+#endif
 				goto error_get_sync;
 			}
 		}
@@ -3496,14 +3505,26 @@ int dsi_ctrl_cmd_transfer(struct dsi_ctrl *dsi_ctrl,
 
 	if (*flags & DSI_CTRL_CMD_READ) {
 		rc = dsi_message_rx(dsi_ctrl, msg, flags);
-		if (rc <= 0)
+		if (rc <= 0) {
 			DSI_CTRL_ERR(dsi_ctrl, "read message failed read length, rc=%d\n",
 					rc);
+#ifdef OPLUS_BUG_STABILITY
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+			DSI_CTRL_MM_ERR(dsi_ctrl, "read message failed read length, rc=%d\n",rc);
+#endif
+#endif
+		}
 	} else {
 		rc = dsi_message_tx(dsi_ctrl, msg, flags);
-		if (rc)
+		if (rc) {
 			DSI_CTRL_ERR(dsi_ctrl, "command msg transfer failed, rc = %d\n",
 					rc);
+#ifdef OPLUS_BUG_STABILITY
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+			DSI_CTRL_MM_ERR(dsi_ctrl, "command msg transfer failed, rc = %d\n",rc);
+#endif
+#endif
+		}
 	}
 
 	dsi_ctrl_update_state(dsi_ctrl, DSI_CTRL_OP_CMD_TX, 0x0);
