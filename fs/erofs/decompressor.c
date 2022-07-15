@@ -73,7 +73,7 @@ static int z_erofs_lz4_prepare_destpages(struct z_erofs_decompress_req *rq,
 			victim = availables[--top];
 			get_page(victim);
 		} else {
-			victim = erofs_allocpage(pagepool, GFP_KERNEL, false);
+			victim = erofs_allocpage(pagepool, GFP_KERNEL, true);
 			if (!victim)
 				return -ENOMEM;
 			victim->mapping = Z_EROFS_MAPPING_STAGING;
@@ -156,7 +156,6 @@ static int z_erofs_lz4_decompress(struct z_erofs_decompress_req *rq, u8 *out)
 			copied = true;
 		}
 	}
-
 	ret = LZ4_decompress_safe_partial(src + inputmargin, out,
 					  inlen, rq->outputsize,
 					  rq->outputsize);

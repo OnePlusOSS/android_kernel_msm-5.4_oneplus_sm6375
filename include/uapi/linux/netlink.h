@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 #ifndef _UAPI__LINUX_NETLINK_H
 #define _UAPI__LINUX_NETLINK_H
+#define OPLUS_FEATURE_WIFI_LUCKYMONEY
 
 #include <linux/const.h>
 #include <linux/socket.h> /* for __kernel_sa_family_t */
@@ -32,7 +33,22 @@
 
 #define NETLINK_INET_DIAG	NETLINK_SOCK_DIAG
 
-#define MAX_LINKS 32		
+#define NETLINK_OPLUS_HANS       28      /* Socket for freezing solution */
+
+#define NETLINK_OPLUS_SLA  33      /*SLA NETLINK SOCK*/
+
+/* Apps monitor NETLINK SOCK */
+#define NETLINK_OPLUS_APPS_MONITOR  35
+
+#define NETLINK_OPLUS_KERNEL2USER  37      /* kernel data info to user space */
+
+/* #define OPLUS_NETLINK_MM_KEVENT 41  (defined in oplus_mm_kevent.h file) */
+
+#define NETLINK_OPLUS_IPV6_RTO  42
+
+#define OPLUS_NETLINK_THEIA_KEVENT 43
+
+#define MAX_LINKS 45
 
 struct sockaddr_nl {
 	__kernel_sa_family_t	nl_family;	/* AF_NETLINK	*/

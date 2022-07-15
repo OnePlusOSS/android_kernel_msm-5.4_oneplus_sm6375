@@ -1140,7 +1140,6 @@ struct ieee80211_tim_parameters {
 	u8 tim_period;
 } __packed;
 
-//#else
 struct ieee80211_wmm_ts_info {
 	u8 ac_dir_tid;
 	u8 ac_up_psb;

@@ -63,7 +63,6 @@
 #define AC_PARAM_ECW_MIN_OFFSET		8
 #define AC_PARAM_AIFS_OFFSET		0
 
-//#endif
 enum _RTL8192Usb_HW {
 	MAC0			= 0x000,
 	MAC4			= 0x004,

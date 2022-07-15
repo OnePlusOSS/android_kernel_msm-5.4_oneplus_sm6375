@@ -274,7 +274,6 @@ static uint32_t get_next_event(struct lpm_cpu *cpu)
 
 	return ktime_to_us(ktime_sub(next_event, ktime_get()));
 }
-
 static void disable_rimps_timer(struct lpm_cpu *cpu)
 {
 	uint32_t ctrl_val;
@@ -1117,6 +1116,10 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		 * LPMs (XO and Vmin).
 		 */
 		if (!from_idle) {
+			#ifdef CONFIG_OPLUS_POWER_UTIL
+			extern void oplus_get_clk_stats(void);
+			oplus_get_clk_stats();
+			#endif
 			clock_debug_print_enabled();
 			regulator_debug_print_enabled();
 		}

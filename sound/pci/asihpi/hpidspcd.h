@@ -21,7 +21,6 @@ Functions for reading DSP code to load into DSP
  */
 /*#ifndef DISABLE_PRAGMA_PACK1 */
 /*#pragma pack(push, 1) */
-/*#endif */
 struct code_header {
 	/** Size in bytes including header */
 	u32 size;
@@ -36,7 +35,6 @@ struct code_header {
 };
 /*#ifndef DISABLE_PRAGMA_PACK1 */
 /*#pragma pack(pop) */
-/*#endif */
 
 /*? Don't need the pragmas? */
 compile_time_assert((sizeof(struct code_header) == 20), code_header_size);

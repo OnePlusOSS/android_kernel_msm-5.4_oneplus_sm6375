@@ -124,6 +124,9 @@ struct walt_task_group {
 	bool colocate;
 	/* Controls whether further updates are allowed to the colocate flag */
 	bool colocate_update_disabled;
+#ifdef OPLUS_FEATURE_POWER_CPUFREQ
+    unsigned int window_policy;
+#endif
 };
 
 struct walt_root_domain {
@@ -205,6 +208,10 @@ extern cpumask_t asym_cap_sibling_cpus;
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_MMAP_LOCK_OPT)
+extern int sysctl_uxchain_v2;
+#endif
 
 extern __read_mostly int scheduler_running;
 
@@ -1153,6 +1160,9 @@ struct rq {
 	int			idle_state_idx;
 #endif
 #endif
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	struct list_head ux_thread_list;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 };
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
