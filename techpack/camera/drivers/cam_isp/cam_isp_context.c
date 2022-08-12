@@ -845,11 +845,24 @@ static int __cam_isp_ctx_handle_buf_done_for_req_list(
 				ctx->ctx_id);
 			ctx_isp->last_bufdone_err_apply_req_id = 0;
 		} else {
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 			list_add(&req->list, &ctx->pending_req_list);
 			CAM_DBG(CAM_REQ,
 				"Move active request %lld to pending list(cnt = %d) [bubble recovery], ctx %u",
 				req->request_id, ctx_isp->active_req_cnt,
 				ctx->ctx_id);
+#else
+			CAM_DBG(CAM_REQ,"ctx %u, ctx state %d, request %lld",
+			ctx->ctx_id,ctx->state,req->request_id);
+
+			if (ctx->state != CAM_CTX_FLUSHED) {
+				list_add(&req->list, &ctx->pending_req_list);
+				CAM_DBG(CAM_REQ,
+					"Move active request %lld to pending list(cnt = %d) [bubble recovery], ctx %u",
+					req->request_id, ctx_isp->active_req_cnt,
+					ctx->ctx_id);
+			}
+#endif
 		}
 	} else {
 		if (!ctx_isp->use_frame_header_ts) {

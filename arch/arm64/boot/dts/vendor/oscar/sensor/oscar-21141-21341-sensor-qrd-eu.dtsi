@@ -1,4 +1,9 @@
 &soc {
+	sensor_fb: sensor_fb {
+		compatible = "oplus,sensor-feedback";
+		master-id  = <3>;
+		smem-id    = <608>;
+	};
 	oplus_sensor {
 			compatible = "oplus,sensor-devinfo";
 			als-row-coe = <360>;

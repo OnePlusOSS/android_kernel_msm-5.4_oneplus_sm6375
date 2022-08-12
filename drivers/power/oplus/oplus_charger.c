@@ -807,7 +807,7 @@ static int init_proc_tbatt_pwroff(void)
 {
 	struct proc_dir_entry *p = NULL;
 
-	p = proc_create("tbatt_pwroff", 0666, NULL, &tbatt_pwroff_proc_fops);
+	p = proc_create("tbatt_pwroff", 0664, NULL, &tbatt_pwroff_proc_fops);
 	if (!p) {
 		chg_err("proc_create  fail!\n");
 	}
@@ -1062,7 +1062,7 @@ static ssize_t critical_log_write(struct file *filp,
 	char write_data[32] = {0};
 	int critical_log = 0;
 
-	if (len > sizeof(write_data)) {
+	if (len <= 0 || len > sizeof(write_data)) {
 		return -EINVAL;
 	}
 	if (copy_from_user(&write_data, buff, len)) {

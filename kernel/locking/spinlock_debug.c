@@ -28,6 +28,7 @@ void __raw_spin_lock_init(raw_spinlock_t *lock, const char *name,
 	lock->raw_lock = (arch_spinlock_t)__ARCH_SPIN_LOCK_UNLOCKED;
 	lock->magic = SPINLOCK_MAGIC;
 	lock->owner = SPINLOCK_OWNER_INIT;
+	lock->owner_pid = -1;
 	lock->owner_cpu = -1;
 }
 
@@ -98,6 +99,7 @@ static inline void debug_spin_lock_after(raw_spinlock_t *lock)
 {
 	WRITE_ONCE(lock->owner_cpu, raw_smp_processor_id());
 	WRITE_ONCE(lock->owner, current);
+	WRITE_ONCE(lock->owner_pid, current->pid);
 }
 
 static inline void debug_spin_unlock(raw_spinlock_t *lock)
@@ -109,6 +111,7 @@ static inline void debug_spin_unlock(raw_spinlock_t *lock)
 							lock, "wrong CPU");
 	WRITE_ONCE(lock->owner, SPINLOCK_OWNER_INIT);
 	WRITE_ONCE(lock->owner_cpu, -1);
+	WRITE_ONCE(lock->owner_pid, -1);
 }
 
 /*
