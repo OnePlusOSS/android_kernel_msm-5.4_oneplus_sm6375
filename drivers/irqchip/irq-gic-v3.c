@@ -46,6 +46,7 @@ void (*match_modem_wakeup)(void) = NULL;
 EXPORT_SYMBOL(match_modem_wakeup);
 void (*match_wlan_wakeup)(void) = NULL;
 EXPORT_SYMBOL(match_wlan_wakeup);
+extern is_first_ipcc_msg;
 #endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 
@@ -632,15 +633,16 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 
 		pr_warn("%s: %d triggered %s\n", __func__, irq, name);
 
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		if ((name != NULL)&&(strncmp(name, "ipa", strlen("ipa")) != 0))
+			log_irq_wakeup_reason(irq);
+		#endif
+
 		pr_warn("%s: irq:%d hwirq:%u triggered %s\n",
 			 __func__, irq, i, name);
 		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
-		if ((strncmp(name, "ipcc_0", strlen("ipcc_0")) == 0)|| 
-		(strncmp(name, "modem", strlen("modem")) == 0)||
-		(strncmp(name, "glink-native-modem", strlen("glink-native-modem")) == 0)||
-		(strncmp(name, "msi_modem_irq", strlen("msi_modem_irq")) == 0)||
-		(strncmp(name, "ipa", strlen("ipa")) == 0)||
-		(strncmp(name, "qmi", strlen("qmi")) == 0)){
+		if (strncmp(name, "ipcc_0", strlen("ipcc_0")) == 0) {
+			is_first_ipcc_msg = 1;
 			if (match_modem_wakeup != NULL) {
 				match_modem_wakeup();
 			}
@@ -653,9 +655,17 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		do {
+			if (strncmp(name, "ipa", strlen("ipa")) != 0) {
+				wakeup_reasons_statics(name, WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
+			}
+		} while (0);
+		#else
 		do {
 			wakeup_reasons_statics(name, WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
 		} while(0);
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 		#endif
 	}
 }

@@ -15,3 +15,9 @@ config UTILS_MONITOR
         default n
         help
           record task load
+
+config OPLUS_GPU_FREQ_TRACE_POINT
+	tristate "msm_kgsl"
+	default n
+	help
+	  change kgsl gpu frequency trace point

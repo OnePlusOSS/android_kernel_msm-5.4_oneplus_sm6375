@@ -2633,6 +2633,9 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 	struct msm_display_dsc_info *dsc = NULL;
 	struct sde_encoder_virt *sde_enc;
 	struct sde_hw_pingpong *hw_pp;
+#ifdef OPLUS_BUG_STABILITY
+	struct drm_msm_dither dither;
+#endif
 	u32 bpp, bpc;
 	int num_lm;
 
@@ -2674,8 +2677,22 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 	num_lm = sde_rm_topology_get_num_lm(&sde_kms->rm, topology);
 	for (i = 0; i < num_lm; i++) {
 		hw_pp = sde_enc->hw_pp[i];
+#ifndef OPLUS_BUG_STABILITY
 		phys->hw_pp->ops.setup_dither(hw_pp,
 				dither_cfg, len);
+#else
+		if (hw_pp) {
+			if (len == sizeof(dither)) {
+				memcpy(&dither, dither_cfg, len);
+				dither.c0_bitdepth = 6;
+				dither.c1_bitdepth = 6;
+				dither.c2_bitdepth = 6;
+				dither.c3_bitdepth = 6;
+				dither.temporal_en = 1;
+				phys->hw_pp->ops.setup_dither(hw_pp, &dither, len);
+			}
+		}
+#endif
 	}
 }
 

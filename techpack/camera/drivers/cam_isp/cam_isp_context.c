@@ -3656,15 +3656,22 @@ static int __cam_isp_ctx_flush_req_in_top_state(
 	CAM_DBG(CAM_ISP, "Flush pending list");
 	spin_lock_bh(&ctx->lock);
 	rc = __cam_isp_ctx_flush_req(ctx, &ctx->pending_req_list, flush_req);
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	spin_unlock_bh(&ctx->lock);
+#endif
 
 	if (flush_req->type == CAM_REQ_MGR_FLUSH_TYPE_ALL) {
 		if (ctx->state <= CAM_CTX_READY) {
 			ctx->state = CAM_CTX_ACQUIRED;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			spin_unlock_bh(&ctx->lock);
+#endif
 			goto end;
 		}
 
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 		spin_lock_bh(&ctx->lock);
+#endif
 		ctx->state = CAM_CTX_FLUSHED;
 		ctx_isp->substate_activated = CAM_ISP_CTX_ACTIVATED_HALT;
 		spin_unlock_bh(&ctx->lock);
@@ -3722,7 +3729,13 @@ static int __cam_isp_ctx_flush_req_in_top_state(
 			CAM_ERR(CAM_ISP, "Failed to reset HW rc: %d", rc);
 
 		ctx_isp->init_received = false;
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	}
+#else
+	} else {
+		spin_unlock_bh(&ctx->lock);
+	}
+#endif
 
 end:
 	ctx_isp->bubble_frame_cnt = 0;

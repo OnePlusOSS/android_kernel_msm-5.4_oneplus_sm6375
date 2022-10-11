@@ -64,6 +64,9 @@
 #include "sia81xx_socket.h"
 #endif
 
+#ifdef OPLUS_FEATURE_MM_FEEDBACK
+#include <soc/oplus/system/oplus_mm_kevent_fb.h>
+#endif /* OPLUS_FEATURE_MM_FEEDBACK */
 
 #define SIA81XX_NAME					"sia81xx"
 #define SIA81XX_I2C_NAME				SIA81XX_NAME
@@ -1362,6 +1365,96 @@ static ssize_t sia81xx_cmd_store(
 /********************************************************************
  * sia81xx codec driver
  ********************************************************************/
+ #ifdef OPLUS_FEATURE_MM_FEEDBACK
+/* Add for smartpa err feedback. */
+#define OPLUS_AUDIO_EVENTID_SMARTPA_ERR    10041
+#define ERROR_INFO_MAX_LEN                 32
+
+#define STATUS_NORMAL_VALUE                0x00 //reg 0x20, normal value=0x00
+#define STATUS_CHECK_MASK                  0x05 //mask bit0,bit2
+
+static bool g_chk_err = false;
+static char const *sia81xx_check_feedback_text[] = {"Off", "On"};
+static const struct soc_enum sia81xx_check_feedback_enum =
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(sia81xx_check_feedback_text), sia81xx_check_feedback_text);
+
+struct check_status_err {
+	int bit;
+	uint16_t err_val;
+	char info[ERROR_INFO_MAX_LEN];
+};
+
+static const struct check_status_err check_err[] = {
+	{0, 1, "OverTemperature"},
+	{2, 1, "CurrentHigh"},
+};
+
+static int sia81xx_check_status_reg(void)
+{
+	char reg_val = 0;
+	sia81xx_dev_t *sia81xx = NULL;
+	char fd_buf[MM_KEVENT_MAX_PAYLOAD_SIZE] = {0};
+	char info[MM_KEVENT_MAX_PAYLOAD_SIZE] = {0};
+	int offset = 0;
+	int i = 0;
+	int num = 0;
+	int err = 0;
+
+	mutex_lock(&sia81xx_list_mutex);
+	/* check status register 0x20 value */
+	list_for_each_entry(sia81xx, &sia81xx_list, list) {
+		num++;
+		err = sia81xx_regmap_read(sia81xx->regmap, 0x20, 1, &reg_val);
+		if ((0 == err) && (STATUS_NORMAL_VALUE != (reg_val&STATUS_CHECK_MASK))) {
+			pr_err("%s: SPK%d status error, reg[0x20] = 0x%x\n", __func__, num, reg_val);
+
+			offset = strlen(info);
+			scnprintf(info + offset, sizeof(info) - offset - 1, "SPK%d:reg[0x20]=0x%x,", num, reg_val);
+			for (i = 0; i < ARRAY_SIZE(check_err); i++) {
+				if (check_err[i].err_val == (1 & (reg_val>>check_err[i].bit))) {
+					offset = strlen(info);
+					scnprintf(info + offset, sizeof(info) - offset - 1, "%s,", check_err[i].info);
+				}
+			}
+		}
+	}
+	mutex_unlock(&sia81xx_list_mutex);
+
+	/* feedback the check error */
+	offset = strlen(info);
+	if ((offset > 0) && (offset < MM_KEVENT_MAX_PAYLOAD_SIZE)) {
+		fd_buf[offset] = '\0';
+		scnprintf(fd_buf, sizeof(fd_buf) - 1, "payload@@%s", info);
+		mm_fb_audio_kevent_named(OPLUS_AUDIO_EVENTID_SMARTPA_ERR,
+				MM_FB_KEY_RATELIMIT_1MIN, fd_buf);
+		pr_err("%s: fd_buf=%s\n", __func__, fd_buf);
+	}
+
+	return 1;
+}
+
+static int sia81xx_set_check_feedback(struct snd_kcontrol *kcontrol,
+								struct snd_ctl_elem_value *ucontrol)
+{
+	int need_chk = ucontrol->value.integer.value[0];
+	pr_info("%s: need_chk = %d\n", __func__, need_chk);
+	if (need_chk) {
+		g_chk_err = true;
+	}
+
+	return 1;
+}
+
+static int sia81xx_get_check_feedback(struct snd_kcontrol *kcontrol,
+								struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = g_chk_err;
+	pr_info("%s: g_chk_err = %d\n", __func__, g_chk_err);
+
+	return 0;
+}
+#endif /* OPLUS_FEATURE_MM_FEEDBACK */
+
 static int sia81xx_power_get(
 	struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
@@ -1402,6 +1495,14 @@ static int sia81xx_power_set(
 	if(1 == ucontrol->value.integer.value[0]) {
 		sia81xx_resume(sia81xx);
 	} else {
+		if (sia81xx->chip_type == CHIP_TYPE_SIA8109) {
+			if (g_chk_err) {
+				sia81xx_check_status_reg();
+				g_chk_err = false;
+			}
+		} else {
+			pr_err("%s: chip type is not sia8109,not support this feedback,sia81xx->chip_type = %d\n", __func__, sia81xx->chip_type);
+		}
 		sia81xx_suspend(sia81xx);
 	}
 
@@ -1452,9 +1553,16 @@ static int sia81xx_audio_scene_set(
 		sia81xx->scene = ucontrol->value.integer.value[0];
 	}
 
-	if (sia81xx_is_chip_en(sia81xx))
-		sia81xx_resume(sia81xx);
-	
+	if(sia81xx_is_chip_en(sia81xx)){
+		if (CHIP_TYPE_SIA8152 == sia81xx->chip_type){
+			sia81xx_reboot(sia81xx);
+			pr_debug("[debug]sia81xx_reboot \r\n");
+		} else {
+			sia81xx_resume(sia81xx);
+			pr_debug("[debug]sia81xx_resume \r\n");
+		}
+	}
+
 	return 0;
 }
 
@@ -1693,6 +1801,12 @@ static const struct snd_kcontrol_new sia81xx_controls[] = {
 	SOC_ENUM_EXT("Speaker_Mute_Switch", spk_mute_ctrl_enum,
 			sia81xx_spk_mute_ctrl_get, sia81xx_spk_mute_ctrl_put),
 	#endif /* OPLUS_FEATURE_SPEAKER_MUTE */
+
+	#ifdef OPLUS_FEATURE_MM_FEEDBACK
+	/* Add for smartpa err feedback. */
+	SOC_ENUM_EXT("SIA_CHECK_FEEDBACK", sia81xx_check_feedback_enum,
+			sia81xx_get_check_feedback, sia81xx_set_check_feedback),
+	#endif /* OPLUS_FEATURE_MM_FEEDBACK */
 };
 
 #ifdef OPLUS_AUDIO_PA_BOOST_VOLTAGE
@@ -1711,6 +1825,12 @@ static const struct snd_kcontrol_new sia81xx_controls_new[] = {
 	SOC_ENUM_EXT("Speaker_Mute_Switch", spk_mute_ctrl_enum,
 			sia81xx_spk_mute_ctrl_get, sia81xx_spk_mute_ctrl_put),
 	#endif /* OPLUS_FEATURE_SPEAKER_MUTE */
+
+	#ifdef OPLUS_FEATURE_MM_FEEDBACK
+	/* Add for smartpa err feedback. */
+	SOC_ENUM_EXT("SIA_CHECK_FEEDBACK", sia81xx_check_feedback_enum,
+			sia81xx_get_check_feedback, sia81xx_set_check_feedback),
+	#endif /* OPLUS_FEATURE_MM_FEEDBACK */
 };
 #endif /* OPLUS_AUDIO_PA_BOOST_VOLTAGE */
 

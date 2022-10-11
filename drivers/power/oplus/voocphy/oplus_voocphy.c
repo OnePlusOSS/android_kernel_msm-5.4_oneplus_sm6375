@@ -48,6 +48,11 @@
 #define RXDATA_DONE_FLAG_MASK		BIT(1)
 #define TXDATA_DONE_FALG_MASK		BIT(0)
 
+#define ADAPTER_CHECK_VOOC_HEAD_TIMES	0x2
+#define ADAPTER_CHECK_CMD_DATA_TIMES	0x2
+#define FAST_CHARGER_MOS_DISABLE	0
+
+
 int voocphy_log_level = 3;
 #define voocphy_info(fmt, ...)	\
 do {						\
@@ -1413,8 +1418,12 @@ int oplus_voocphy_reset_variables(struct oplus_voocphy_manager *chip)
 	chip->irq_tx_timeout_num = 0;
 	chip->irq_tx_timeout = 0;
 	chip->irq_hw_timeout_num = 0;
+	chip->irq_tx_fail_num = 0;
+	chip->adapter_check_vooc_head_count = 0;
+	chip->adapter_check_cmd_data_count = 0;
 
 	chip->irq_rxdone_num = 0;
+	chip->start_vaild_frame = false;
 
 	//default vooc head as svooc
 	status = oplus_voocphy_write_mesg_mask(VOOC_INVERT_HEAD_MASK,
@@ -1805,6 +1814,12 @@ int oplus_voocphy_handle_adapter_check_commu_process_cmd(struct oplus_voocphy_ma
 		status = oplus_voocphy_write_mesg_mask(TX0_DET_BIT5_MASK,
 		                                       &chip->voocphy_tx_buff[0], BIT_ACTIVE);
 		chip->fastchg_adapter_ask_cmd = VOOC_CMD_UNKNOW; //reset cmd type
+
+		if (chip->code_id_far != chip->code_id_local &&
+		    chip->irq_tx_fail_num) {
+			voocphy_info( "adapter check fail because TXDATA_WR_FAIL");
+			oplus_voocphy_set_status_and_notify_ap(chip, FAST_NOTIFY_ADAPTER_STATUS_ABNORMAL);
+		}
 	} else {
 		voocphy_info( "should not go here");
 	}
@@ -1855,8 +1870,8 @@ int oplus_voocphy_handle_tell_model_process_cmd(struct oplus_voocphy_manager *ch
 		                          | chip->adapter_mesg;
 		//adapter id bit7 is need to clear
 		chip->adapter_model_ver &= 0x7F;
-		//some 0x12 adapter is 20W
-		if (chip->adapter_model_ver == 0x12 && chip->adapter_type != ADAPTER_SVOOC) {
+		//some 0x12/0x13 adapter is 20W
+		if ((chip->adapter_model_ver == 0x13 || chip->adapter_model_ver == 0x12) && chip->adapter_type != ADAPTER_SVOOC) {
 			chip->adapter_model_ver = POWER_SUPPLY_USB_SUBTYPE_VOOC;
 		}
 		voocphy_info( "adapter_model_ver:0x%0x",
@@ -1928,6 +1943,11 @@ int oplus_voocphy_handle_ask_bat_model_process_cmd(struct oplus_voocphy_manager 
 		oplus_voocphy_write_mesg_mask(TX1_DET_BIT0_TO_BIT1_MASK,
 		                              &chip->voocphy_tx_buff[1], temp_data_h);
 		if (chip->ask_batt_sys == 1) {
+			if (chip->adapter_model_ver == 0 &&
+				(chip->adapter_type == ADAPTER_SVOOC || chip->adapter_type == ADAPTER_VOOC30)) {
+				voocphy_info( "set adapter status abnormal");
+				oplus_voocphy_set_status_and_notify_ap(chip, FAST_NOTIFY_ADAPTER_STATUS_ABNORMAL);
+			} else {
 			if (chip->fastchg_real_allow) {
 				chip->fastchg_allow = true; //batt allow dchg
 				chip->fastchg_start = true; //fastchg_start true
@@ -1942,6 +1962,7 @@ int oplus_voocphy_handle_ask_bat_model_process_cmd(struct oplus_voocphy_manager 
 				chip->fastchg_dummy_start = true;
 				oplus_voocphy_set_status_and_notify_ap(chip, FAST_NOTIFY_DUMMY_START);
 				voocphy_info( "fastchg_dummy_start and reset voocphy");
+				}
 			}
 			chip->ask_bat_model_finished = true;
 			chip->fastchg_adapter_ask_cmd = VOOC_CMD_UNKNOW; //reset cmd
@@ -2378,14 +2399,26 @@ int oplus_voocphy_handle_get_batt_vol_cmd(struct oplus_voocphy_manager *chip)
 int oplus_voocphy_handle_null_cmd(struct oplus_voocphy_manager *chip)
 {
 	int status = VOOCPHY_SUCCESS;
+	unsigned char dchg_enable_status = 0;
 
 	if (!chip) {
 		voocphy_info("%s chip null\n");
 		return VOOCPHY_EFATAL;
 	}
 
-	//status = oplus_voocphy_reset_voocphy();
-	voocphy_info("null cmd");
+	chip->adapter_check_cmd_data_count++;
+	oplus_voocphy_get_chg_enable(chip, &dchg_enable_status);
+	if (dchg_enable_status != FAST_CHARGER_MOS_DISABLE &&
+	    chip->pre_adapter_ask_cmd == VOOC_CMD_GET_BATT_VOL &&
+	    chip->adapter_check_cmd_data_count < ADAPTER_CHECK_CMD_DATA_TIMES &&
+	    chip->adjust_curr != ADJ_CUR_STEP_REPLY_VBATT) {
+		voocphy_info("get error cmd data, try again adapter_check_vooc_head_count =%d",
+			chip->adapter_check_cmd_data_count);
+		return VOOCPHY_EUNSUPPORTED;
+	} else {
+		voocphy_info("get error cmd data, reset voocphy & fastchg rerun check");
+		oplus_voocphy_set_status_and_notify_ap(chip, FAST_NOTIFY_ERR_COMMU);
+	}
 
 	return status;
 }
@@ -2429,6 +2462,7 @@ int oplus_voocphy_handle_ask_ap_status(struct oplus_voocphy_manager *chip)
 int oplus_voocphy_reply_adapter_mesg(struct oplus_voocphy_manager *chip)
 {
 	int status = VOOCPHY_SUCCESS;
+	bool cur_data_valid = true;
 
 	if (!chip) {
 		voocphy_info("%s chip null\n", __func__);
@@ -2485,7 +2519,10 @@ int oplus_voocphy_reply_adapter_mesg(struct oplus_voocphy_manager *chip)
 		status = oplus_voocphy_handle_get_batt_vol_cmd(chip);
 		break;
 	case VOOC_CMD_NULL:
+	case VOOC_CMD_RECEVICE_DATA_0E:
+	case VOOC_CMD_RECEVICE_DATA_0F:
 		status = oplus_voocphy_handle_null_cmd(chip);
+		cur_data_valid = false;
 		break;
 	case VOOC_CMD_TELL_USB_BAD:
 		status = oplus_voocphy_handle_tell_usb_bad_cmd(chip);
@@ -2498,6 +2535,8 @@ int oplus_voocphy_reply_adapter_mesg(struct oplus_voocphy_manager *chip)
 		break;
 	}
 
+	if (cur_data_valid)
+		chip->adapter_check_cmd_data_count = 0;
 	return status;
 }
 
@@ -2609,6 +2648,7 @@ int oplus_voocphy_get_mesg_from_adapter(struct oplus_voocphy_manager *chip)
 	int status = VOOCPHY_SUCCESS;
 	unsigned char vooc_head = 0;
 	unsigned char vooc_move_head = 0;
+	unsigned char dchg_enable_status = 0;
 
 	if (!chip) {
 		voocphy_info("%s, chip null\n", __func__);
@@ -2631,6 +2671,7 @@ int oplus_voocphy_get_mesg_from_adapter(struct oplus_voocphy_manager *chip)
 		}
 		chip->vooc_head = SVOOC_INVERT_HEAD;
 		chip->adapter_type = ADAPTER_SVOOC; //detect svooc adapter
+		chip->adapter_check_vooc_head_count = 0;
 	} else if (vooc_head == VOOC3_HEAD || vooc_move_head == VOOC3_HEAD) {
 		if (vooc_head == VOOC3_HEAD) {
 			voocphy_info("VOOC30_HEAD");
@@ -2640,7 +2681,9 @@ int oplus_voocphy_get_mesg_from_adapter(struct oplus_voocphy_manager *chip)
 		}
 		chip->vooc_head = VOOC3_INVERT_HEAD;
 		chip->adapter_type = ADAPTER_VOOC30; //detect vooc30 adapter
+		chip->adapter_check_vooc_head_count = 0;
 	} else if (vooc_head == VOOC2_HEAD ||vooc_move_head == VOOC2_HEAD) {
+		chip->adapter_check_vooc_head_count = 0;
 		if (vooc_move_head == VOOC2_HEAD) {
 			voocphy_info("VOOC20_MOVE_HEAD");
 			chip->vooc_move_head = true;
@@ -2687,9 +2730,20 @@ int oplus_voocphy_get_mesg_from_adapter(struct oplus_voocphy_manager *chip)
 #endif
 		}
 	} else {
-		voocphy_info("unknow frame head, reset voocphy & fastchg rerun check");
-		oplus_voocphy_set_status_and_notify_ap(chip, FAST_NOTIFY_ERR_COMMU);
-		return VOOCPHY_EUNSUPPORTED;
+		chip->adapter_check_vooc_head_count++;
+		oplus_voocphy_get_chg_enable(chip, &dchg_enable_status);
+		if (dchg_enable_status != FAST_CHARGER_MOS_DISABLE &&
+				chip->pre_adapter_ask_cmd == VOOC_CMD_GET_BATT_VOL &&
+				chip->adapter_check_vooc_head_count < ADAPTER_CHECK_VOOC_HEAD_TIMES &&
+				chip->adjust_curr != ADJ_CUR_STEP_REPLY_VBATT) {
+			voocphy_info("unknow frame head error, try again adapter_check_vooc_head_count =%d",
+					chip->adapter_check_vooc_head_count);
+			return VOOCPHY_EUNSUPPORTED;
+		} else {
+			voocphy_info("unknow frame head, reset voocphy & fastchg rerun check");
+			oplus_voocphy_set_status_and_notify_ap(chip, FAST_NOTIFY_ERR_COMMU);
+			return VOOCPHY_EUNSUPPORTED;
+		}
 	}
 
 	if (!chip->vooc_move_head) {
@@ -2804,7 +2858,7 @@ static int oplus_voocphy_get_write_txbuff_error(struct oplus_voocphy_manager *ch
 }
 
 extern oplus_chg_get_chg_type(void);
-#define MAX_IGNORE 5
+#define MAX_IGNORE 6
 #define FIRST_FRAME 0xa8
 irqreturn_t oplus_voocphy_interrupt_handler(struct oplus_voocphy_manager *chip)
 {
@@ -2877,6 +2931,11 @@ irqreturn_t oplus_voocphy_interrupt_handler(struct oplus_voocphy_manager *chip)
 			chip->fastchg_commu_ing = true;
 		}
 	}
+
+	if (chip->vooc_flag & TXDATA_WR_FAIL_FLAG_MASK) {
+		chip->irq_tx_fail_num++;
+	}
+
 	if (chip->vooc_flag == 0xF) {
 		voocphy_info("!RX_START_FLAG & TXDATA_WR_FAIL_FLAG occured do nothing");
 	} else if (chip->vooc_flag & RXDATA_DONE_FLAG_MASK) {	//rxdata recv done
@@ -2892,6 +2951,7 @@ irqreturn_t oplus_voocphy_interrupt_handler(struct oplus_voocphy_manager *chip)
 			} else {
 				//oplus_chg_disable_charge();
 				oplus_chg_suspend_charger();
+				oplus_chg_really_suspend_charger(true);
 				voocphy_info("allow fastchg adapter type %d\n", chip->adapter_type);
 			}
 
@@ -3022,9 +3082,13 @@ int oplus_voocphy_variables_init(struct oplus_voocphy_manager *chip)
 	chip->irq_tx_timeout_num = 0;
 	chip->irq_tx_timeout = 0;
 	chip->irq_hw_timeout_num = 0;
+	chip->irq_tx_fail_num = 0;
+	chip->start_vaild_frame = false;
 
 	chip->irq_rxdone_num = 0;
 	chip->start_vaild_frame = false;
+	chip->adapter_check_vooc_head_count = 0;
+	chip->adapter_check_cmd_data_count = 0;
 
 	//default vooc head as svooc
 	status = oplus_voocphy_write_mesg_mask(VOOC_INVERT_HEAD_MASK,
@@ -3648,7 +3712,7 @@ int oplus_voocphy_ap_event_handle(unsigned long data)
 }
 
 #define VOOC_TEMP_OVER_COUNTS	2
-#define VOOC_TEMP_RANGE_THD	 10
+#define VOOC_TEMP_RANGE_THD		20
 
 void oplus_voocphy_reset_temp_range(struct oplus_voocphy_manager *chip)
 {
@@ -4495,6 +4559,8 @@ void oplus_voocphy_reset_fastchg_after_usbout(void)
 	chip->fastchg_ing = false;
 	chip->fastchg_start = false;
 	chip->fastchg_commu_ing = false;
+	chip->adapter_check_vooc_head_count = 0;
+	chip->adapter_check_cmd_data_count = 0;
 	/*avoid displaying vooc symbles when btb_temp_over and plug out*/
 	if (chip->btb_temp_over) {
 		voocphy_info("btb_temp_over plug out\n");
@@ -4592,23 +4658,12 @@ static void oplus_voocphy_check_chg_out_work_func(void)
 	chip->fastchg_commu_ing = false;
 	chg_vol = oplus_chg_get_charger_voltage();
 	if (chg_vol >= 0 && chg_vol < 2000) {
-		if (chip->fastchg_start == false ) {
-			chip->fastchg_notify_status = FAST_NOTIFY_UNKNOW;
-		}
-		oplus_voocphy_reset_temp_range(chip);
-		chip->fastchg_to_normal = false;
-		chip->fastchg_to_warm = false;
-		chip->fastchg_dummy_start = false;
-		chip->fastchg_reactive = false;
-		chip->fastchg_ing = false;
-		chip->fastchg_start = false;
-		chip->fastchg_to_warm_full = false;
-		oplus_voocphy_set_user_exit_fastchg(false);
-
-		oplus_chg_clear_chargerid_info();
-		oplus_voocphy_basetimer_monitor_stop(g_voocphy_chip);
-
 		voocphy_info("chg_vol = %d %d\n", chg_vol, chip->fastchg_start);
+		oplus_voocphy_reset_temp_range(chip);
+		oplus_voocphy_reset_fastchg_after_usbout();
+		oplus_chg_set_charger_type_unknown();
+		oplus_chg_vooc_timeout_callback(false);
+		oplus_chg_set_force_psy_changed();
 		oplus_chg_wake_update_work();
 	}
 	voocphy_info("notify chg work chg_vol = %d\n", chg_vol);

@@ -37,3 +37,4 @@ obj-$(CONFIG_OPLUS_SECURE)  += oplus_secure_drivers/
 #endif /* OPLUS_FEATURE_SECURITY_COMMON */
 
 obj-$(CONFIG_RMI4_CORE)		+= rmi4/
+obj-$(CONFIG_INPUT_HALL_SENSOR)    += hall/

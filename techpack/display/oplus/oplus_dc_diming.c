@@ -16,7 +16,9 @@
 #include "oplus_onscreenfingerprint.h"
 #include "oplus_display_panel_common.h"
 #include "oplus_aod.h"
-
+#include "sde_trace.h"
+#include <linux/msm_drm_notify.h>
+#include <linux/notifier.h>
 
 int oplus_dimlayer_bl = 0;
 EXPORT_SYMBOL(oplus_dimlayer_bl);
@@ -50,119 +52,6 @@ extern int oplus_dimlayer_bl_enable;
 
 extern ktime_t oplus_backlight_time;
 extern int oplus_display_mode;
-
-static struct task_struct *hbm_notify_task;
-static wait_queue_head_t hbm_notify_task_wq;
-static atomic_t hbm_task_task_wakeup = ATOMIC_INIT(0);
-static void hbm_notify_init(void);
-int hbm_delay_off = 0;
-extern bool oplus_first_vid;
-extern int oplus_aod_mode;
-
-int dsi_panel_hbm_delay_off(struct dsi_panel *panel) {
-	int rc = 0;
-
-	if (!panel) {
-		pr_err("Invalid params\n");
-		return -EINVAL;
-	}
-
-	mutex_lock(&panel->panel_lock);
-
-	if (!dsi_panel_initialized(panel)) {
-		rc = -EINVAL;
-		goto error;
-	}
-	/* dsi_panel_set_backlight(panel, panel->bl_config.bl_level); */
-	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_HBM_OFF);
-	if (rc) {
-		pr_err("[%s] failed to send DSI_CMD_HBM_OFF cmds, rc=%d\n",
-		       panel->name, rc);
-	}
-error:
-	mutex_unlock(&panel->panel_lock);
-	return rc;
-}
-
-int dsi_display_hbm_delay_off(struct dsi_display *display, int delay) {
-	int rc = 0;
-	if (!display || !display->panel) {
-		pr_err("Invalid params\n");
-		return -EINVAL;
-	}
-
-	mutex_lock(&display->display_lock);
-
-	/* enable the clk vote for CMD mode panels */
-	if (display->config.panel_mode == DSI_OP_CMD_MODE) {
-		dsi_display_clk_ctrl(display->dsi_clk_handle,
-			DSI_CORE_CLK, DSI_CLK_ON);
-	}
-
-	usleep_range(delay*1000, delay*1000);
-
-	rc = dsi_panel_hbm_delay_off(display->panel);
-		if (rc) {
-			pr_err("[%s] failed to dsi_panel_hbm_off, rc=%d\n",
-			       display->name, rc);
-		}
-
-	if (display->config.panel_mode == DSI_OP_CMD_MODE) {
-	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
-				DSI_CORE_CLK, DSI_CLK_OFF);
-	}
-	mutex_unlock(&display->display_lock);
-	return rc;
-}
-
-int dsi_hbm_off_delay(int delay) {
-	int rc = 0;
-	if (!hbm_delay_off)
-		return rc;
-
-	dsi_display_hbm_delay_off(get_main_display(), delay);
-
-	hbm_delay_off = 0;
-	return rc;
-}
-
-static int hbm_notify_worker_kthread(void *data)
-{
-	int ret = 0;
-
-	while (1) {
-		ret = wait_event_interruptible(hbm_notify_task_wq, atomic_read(&hbm_task_task_wakeup));
-		atomic_set(&hbm_task_task_wakeup, 0);
-		dsi_hbm_off_delay(23);
-		if (kthread_should_stop())
-			break;
-	}
-	return 0;
-}
-
-static void hbm_notify_init(void)
-{
-	if (!hbm_notify_task) {
-		hbm_notify_task = kthread_create(hbm_notify_worker_kthread, NULL, "hbm_off_notify");
-		init_waitqueue_head(&hbm_notify_task_wq);
-		wake_up_process(hbm_notify_task);
-		pr_info("[hbmnotify]  init CREATE\n");
-	}
-	/* pr_info("[hbmnotify] init\n"); */
-}
-
-void hbm_notify(void)
-{
-	if (hbm_notify_task != NULL) {
-		hbm_delay_off = 1;
-		oplus_first_vid = false;
-		atomic_set(&hbm_task_task_wakeup, 1);
-		wake_up_interruptible(&hbm_notify_task_wq);
-		/* pr_info("[hbmoffnotify] notify\n"); */
-	} else {
-		pr_info("[hbmoffnotify] notify is NULL\n");
-	}
-}
 
 static struct oplus_brightness_alpha brightness_seed_alpha_lut_dc[] = {
 	{0, 0xff},
@@ -385,6 +274,9 @@ done:
 }
 EXPORT_SYMBOL(sde_connector_update_backlight);
 
+extern int oplus_aod_mode;
+extern bool oplus_first_vid;
+static bool oplus_set_hbm_off_flag;
 int sde_connector_update_hbm(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn = to_sde_connector(connector);
@@ -448,9 +340,6 @@ int sde_connector_update_hbm(struct drm_connector *connector)
 			panel->cur_mode->priv_info->fod_off_vblank = oplus_fod_off_vblank;
 		}
 
-		if (dsi_display->panel->oplus_priv.is_aod_ramless)
-			hbm_notify_init();
-
 		pr_err("OnscreenFingerprint mode: %s",
 		       fingerprint_mode ? "Enter" : "Exit");
 
@@ -501,7 +390,9 @@ int sde_connector_update_hbm(struct drm_connector *connector)
 
 				vblank = panel->cur_mode->priv_info->fod_on_vblank;
 				target_vblank = drm_crtc_vblank_count(crtc) + vblank;
+				SDE_ATRACE_BEGIN("DSI_CMD_HBM_ON");
 				rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_HBM_ON);
+				SDE_ATRACE_END("DSI_CMD_HBM_ON");
 
 				if (vblank) {
 					ret = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc),
@@ -538,12 +429,6 @@ int sde_connector_update_hbm(struct drm_connector *connector)
 				return 0;
 			}
 
-			current_vblank = drm_crtc_vblank_count(crtc);
-
-			ret = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc),
-						 current_vblank != drm_crtc_vblank_count(crtc),
-						 msecs_to_jiffies(17));
-
 			oplus_skip_datadimming_sync = true;
 			oplus_panel_update_backlight_unlock(panel);
 			oplus_skip_datadimming_sync = false;
@@ -572,9 +457,14 @@ int sde_connector_update_hbm(struct drm_connector *connector)
 				} else {
 					rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_NOLP);
 
-					if (dsi_display->panel->oplus_priv.is_aod_ramless)
-						hbm_notify();
-
+					if (dsi_display->panel->oplus_priv.is_aod_ramless) {
+						oplus_set_hbm_off_flag = true;
+					} else {
+						SDE_ATRACE_BEGIN("DSI_CMD_HBM_OFF");
+						rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_HBM_OFF);
+						SDE_ATRACE_END("DSI_CMD_HBM_OFF");
+					}
+					oplus_first_vid = false;
 					/* set nolp would exit hbm, restore when panel status on hbm */
 					if (panel->bl_config.bl_level > panel->bl_config.bl_normal_max_level) {
 						oplus_panel_update_backlight_unlock(panel);
@@ -595,27 +485,47 @@ int sde_connector_update_hbm(struct drm_connector *connector)
 
 			} else {
 				if (dsi_display->panel->oplus_priv.is_aod_ramless) {
-					hbm_notify();
+					oplus_set_hbm_off_flag = true;
 				} else {
-					rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_HBM_OFF);
+					SDE_ATRACE_BEGIN("DSI_CMD_HBM_OFF");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_HBM_OFF);
+					SDE_ATRACE_END("DSI_CMD_HBM_OFF");
 				}
+				oplus_first_vid = false;
 			}
 
 			dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
 					     DSI_CORE_CLK, DSI_CLK_OFF);
 			mutex_unlock(&dsi_display->panel->panel_lock);
-
-			if (vblank) {
-				ret = wait_event_timeout(*drm_crtc_vblank_waitqueue(crtc),
-							 target_vblank == drm_crtc_vblank_count(crtc),
-							 msecs_to_jiffies((vblank + 1) * 17));
-
-				if (!ret) {
-					pr_err("OnscreenFingerprint failed to wait vblank timeout target_vblank=%d current_vblank=%d\n",
-					       target_vblank, drm_crtc_vblank_count(crtc));
-				}
-			}
 		}
+	} else if (!dsi_display->panel->is_hbm_enabled \
+		&& oplus_first_vid && dsi_display->panel->oplus_priv.is_aod_ramless && !oplus_aod_mode) {
+		mutex_lock(&dsi_display->panel->panel_lock);
+
+		if (!dsi_display->panel->panel_initialized) {
+			pr_err("panel not initialized, failed to Enter OnscreenFingerprint\n");
+			mutex_unlock(&dsi_display->panel->panel_lock);
+			return 0;
+		}
+
+		dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
+			DSI_CORE_CLK, DSI_CLK_ON);
+
+		rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_HBM_OFF);
+		pr_err("aod out to send DSI_CMD_HBM_OFF\n");
+
+		oplus_first_vid = false;
+
+		dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
+			DSI_CORE_CLK, DSI_CLK_OFF);
+
+		mutex_unlock(&dsi_display->panel->panel_lock);
+		if (rc) {
+			pr_err("failed to send DSI_CMD_HBM_OFF cmds, rc=%d\n", rc);
+			return rc;
+		}
+
+		oplus_first_vid = false;
 	}
 
 	if (oplus_dimlayer_hbm_vblank_count > 0) {
@@ -862,5 +772,106 @@ int oplus_display_panel_get_dimlayer_enable(void *data)
 	(*dimlayer_bl_enable) = oplus_dimlayer_bl_enable_v2;
 
 	return 0;
+}
+static struct task_struct *press_event_notify_task;
+static wait_queue_head_t press_event_notify_task_wq;
+static atomic_t press_event_task_task_wakeup = ATOMIC_INIT(0);
+static bool press_event_delay_off = false;
+extern int msm_drm_notifier_call_chain(unsigned long val, void *v);
+static int press_event_delay_time = 0;
+
+void dsi_press_event_delay(int delay)
+{
+	if (!press_event_delay_off)
+		return;
+
+	pr_err("fingerprint status: pressed2");
+	usleep_range(delay*1000, delay*1000 + 100);
+	oplus_notify_fingerprint_press_event(true);
+	press_event_delay_off = false;
+	return;
+}
+
+static int press_event_worker_kthread(void *data)
+{
+	int ret = 0;
+
+	while (1) {
+		ret = wait_event_interruptible(press_event_notify_task_wq, atomic_read(&press_event_task_task_wakeup));
+		atomic_set(&press_event_task_task_wakeup, 0);
+		dsi_press_event_delay(press_event_delay_time);
+		if (kthread_should_stop())
+			break;
+	}
+	return 0;
+}
+
+void press_event_notify_init(void)
+{
+	if (!press_event_notify_task) {
+		press_event_notify_task = kthread_create(press_event_worker_kthread, NULL, "press_event_notify");
+		init_waitqueue_head(&press_event_notify_task_wq);
+		wake_up_process(press_event_notify_task);
+		pr_info("[press_event notify]  init CREATE\n");
+	}
+}
+
+void press_event_notify(int delay)
+{
+	if (press_event_notify_task != NULL) {
+		press_event_delay_off = true;
+		press_event_delay_time = delay;
+		atomic_set(&press_event_task_task_wakeup, 1);
+		wake_up_interruptible(&press_event_notify_task_wq);
+	} else {
+		pr_info("[press_event notify] notify is NULL\n");
+	}
+}
+
+void oplus_notify_fingerprint_press_event(bool press)
+{
+	bool blank = press;
+	struct msm_drm_notifier notifier_data;
+	notifier_data.data = &blank;
+
+	SDE_ATRACE_BEGIN("MSM_DRM_ONSCREENFINGERPRINT_EVENT");
+	msm_drm_notifier_call_chain(MSM_DRM_ONSCREENFINGERPRINT_EVENT, &notifier_data);
+	SDE_ATRACE_END("MSM_DRM_ONSCREENFINGERPRINT_EVENT");
+}
+
+void oplus_notify_hbm_off(void)
+{
+	if (oplus_set_hbm_off_flag) {
+		int rc = 0;
+		struct dsi_display *display = get_main_display();
+
+		if (!display || !display->panel) {
+			SDE_ERROR("failed to find display\n");
+			return;
+		}
+
+		SDE_ATRACE_BEGIN("DSI_CMD_HBM_OFF");
+		mutex_lock(&display->panel->panel_lock);
+
+		/* enable the clk vote for CMD mode panels */
+		if (display->config.panel_mode == DSI_OP_CMD_MODE) {
+			dsi_display_clk_ctrl(display->dsi_clk_handle,
+					DSI_CORE_CLK, DSI_CLK_ON);
+		}
+
+		if (display->panel->bl_config.bl_level <= 2047)
+			rc = dsi_panel_tx_cmd_set(display->panel, DSI_CMD_HBM_OFF);
+		else
+			rc = dsi_panel_tx_cmd_set(display->panel, DSI_CMD_HBM_OFF_HIGHLIGHT);
+
+		if (display->config.panel_mode == DSI_OP_CMD_MODE) {
+			rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
+					DSI_CORE_CLK, DSI_CLK_OFF);
+		}
+
+		mutex_unlock(&display->panel->panel_lock);
+		SDE_ATRACE_END("DSI_CMD_HBM_OFF");
+		oplus_set_hbm_off_flag = false;
+	}
 }
 

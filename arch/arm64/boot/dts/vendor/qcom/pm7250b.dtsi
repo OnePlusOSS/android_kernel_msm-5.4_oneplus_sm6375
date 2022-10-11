@@ -421,6 +421,8 @@
 			reg = <0x5300>;
 			qcom,vib-ldo-volt-uv = <3000000>;
 			qcom,disable-overdrive;
+			qcom,vib-type = <0>;	/*0:ldo 1:gpio*/
+			status = "okay";
 		};
 	};
 };

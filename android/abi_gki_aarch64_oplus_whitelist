@@ -8,6 +8,7 @@
   wait_for_completion_killable_timeout
   __kfifo_to_user
   strncat
+  oplus_misc_healthinfo
 #endif
 
 #ifdef OPLUS_FEATURE_OPROJECT
@@ -124,6 +125,11 @@
   __regmap_init_i2c
 #endif
 
+#ifdef CONFIG_SND_SOC_AW882XX
+class_create_file_ns
+class_remove_file_ns
+#endif
+
 #ifdef OPLUS_FEATURE_TP_BASIC
   prepare_creds
   flush_cache_all
@@ -161,6 +167,10 @@
 #ifdef OPLUS_FEATURE_CAMERA_GKI
   fan53870_cam_ldo_set_voltage
   fan53870_cam_ldo_disable
+  wl2868c_set_ldo_value
+  wl2868c_set_en_ldo
+  wl2868c_ldo_enable
+  wl2868c_ldo_disable
 #endif
 
 #ifdef CONFIG_OPLUS_FEATURE_MIDAS

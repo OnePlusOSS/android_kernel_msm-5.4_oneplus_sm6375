@@ -14,16 +14,29 @@
 #include <linux/slab.h>
 #include <linux/atomic.h>
 #include "oplus_ssc_interact.h"
+#include <linux/of.h>
 
-
+#if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY)
+#include <linux/soc/qcom/panel_event_notifier.h>
+#include <drm/drm_panel.h>
+#include <linux/kernel.h>
+#include <linux/task_work.h>
+#include <linux/timer.h>
+#include <linux/time.h>
+#include <linux/delay.h>
+#endif
 
 #define FIFO_SIZE 32
 #define LB_TO_HB_THRD    150
 
 /* static DECLARE_KFIFO_PTR(test, struct fifo_frame); */
 
+#if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY)
+/* to do */
+#else
 extern int register_lcdinfo_notifier(struct notifier_block *nb);
 extern int unregister_lcdinfo_notifier(struct notifier_block *nb);
+#endif
 
 static struct ssc_interactive *g_ssc_cxt = NULL;
 
@@ -32,7 +45,7 @@ static void ssc_interactive_set_fifo(uint8_t type, uint16_t data)
 	struct fifo_frame fifo_fm;
 	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
 	int ret = 0;
-	pr_info("type= %u, data=%d\n", type, data);
+	/*pr_info("type= %u, data=%d\n", type, data);*/
 	memset(&fifo_fm, 0, sizeof(struct fifo_frame));
 	fifo_fm.type = type;
 	fifo_fm.data = data;
@@ -66,30 +79,29 @@ static void ssc_interactive_set_brightness(uint16_t brigtness)
 {
 	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
 	spin_lock(&ssc_cxt->rw_lock);
-	/* if(brigtness > LB_TO_HB_THRD) */
-		/* brigtness = 1023; */
+/*	if (brigtness > LB_TO_HB_THRD)
+		brigtness = 1023;
 	if (brigtness < ssc_cxt->m_dvb_coef.dvb1) {
 		brigtness = ssc_cxt->m_dvb_coef.dvb1 - 1;
-	} else if (brigtness < ssc_cxt->m_dvb_coef.dvb2) {
+	} else if(brigtness < ssc_cxt->m_dvb_coef.dvb2) {
 		brigtness = ssc_cxt->m_dvb_coef.dvb2 - 1;
-	} else if (brigtness < ssc_cxt->m_dvb_coef.dvb3) {
+	} else if(brigtness < ssc_cxt->m_dvb_coef.dvb3) {
 		brigtness = ssc_cxt->m_dvb_coef.dvb3 - 1;
 	} else if (brigtness >= ssc_cxt->m_dvb_coef.dvb_l2h) {
 		brigtness = 1023;
 	} else {
-		/* do noting */
+		//do noting
 		spin_unlock(&ssc_cxt->rw_lock);
 		return;
 	}
-
+*/
 
 	if (brigtness == ssc_cxt->a_info.brightness) {
 		/* pr_info("brigtness=%d is the same\n", brigtness); */
 		spin_unlock(&ssc_cxt->rw_lock);
 		return;
 	}
-
-	pr_info("brigtness=%d brightness=%d\n", brigtness, ssc_cxt->a_info.brightness);
+	/*pr_info("brigtness=%d brightness=%d\n", brigtness, ssc_cxt->a_info.brightness);*/
 
 	ssc_cxt->a_info.brightness = brigtness;
 	spin_unlock(&ssc_cxt->rw_lock);
@@ -259,7 +271,7 @@ static ssize_t dc_mode_show(struct device *dev,
 	dc_mode = ssc_cxt->a_info.dc_mode;
 	spin_unlock(&ssc_cxt->rw_lock);
 
-	pr_info("dc_mode_show dc_mode=  %d\n", dc_mode);
+	pr_info("dc_mode_show dc_mode= %u\n", dc_mode);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", dc_mode);
 }
@@ -278,6 +290,32 @@ static struct attribute_group ssc_interactive_attribute_group = {
 		.attrs = ssc_interactive_attributes
 };
 
+#if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY)
+static void lcdinfo_callback(enum panel_event_notifier_tag tag,
+        struct panel_event_notification *notification, void *client_data)
+{
+	if (!notification) {
+		pr_err("Invalid notification\n");
+		return;
+	}
+
+	/*pr_err("Notification type:%d, data:%d",
+			notification->notif_type,
+			notification->notif_data.data);*/
+
+	switch (notification->notif_type) {
+	case DRM_PANEL_EVENT_BACKLIGHT:
+		ssc_interactive_set_brightness(notification->notif_data.data);
+		break;
+	case DRM_PANEL_EVENT_DC_MODE:
+		ssc_interactive_set_dc_mode(notification->notif_data.data);
+		break;
+	default:
+		break;
+	}
+	return;
+}
+#else
 static int lcdinfo_callback(struct notifier_block *nb, unsigned long event,
         void *data)
 {
@@ -300,11 +338,78 @@ static int lcdinfo_callback(struct notifier_block *nb, unsigned long event,
 
 	return 0;
 }
+#endif
+
+#if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY)
+static void ssc_regiseter_lcd_notify_work(struct work_struct *work)
+{
+	int rc = 0;
+	int i;
+	int count;
+	struct device_node *node = NULL;
+	struct drm_panel *panel = NULL;
+	struct device_node *np = NULL;
+	void *cookie = NULL;
+	void *data = NULL;
+
+	np = of_find_node_by_name(NULL, "sensor_dev");
+	if (!np) {
+		pr_err("Device tree info missing.\n");
+		return;
+	} else {
+		pr_err("Device tree info found.\n");
+	}
+
+	count = of_count_phandle_with_args(np, "oplus,display_panel", NULL);
+	if (count <= 0) {
+		pr_err("oplus,display_panel not found\n");
+		return;
+	}
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "oplus,display_panel", i);
+		panel = of_drm_find_panel(node);
+		pr_err("%s: panel[%d] IS_ERR =%d \n", __func__, i, IS_ERR(panel));
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			g_ssc_cxt->active_panel = panel;
+		} else {
+			rc = PTR_ERR(panel);
+		}
+	}
+
+	if (g_ssc_cxt->active_panel) {
+		cookie = panel_event_notifier_register(
+			PANEL_EVENT_NOTIFICATION_PRIMARY,
+			PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_BACKLIGHT,
+			g_ssc_cxt->active_panel, &lcdinfo_callback,
+			data);
+		if (!cookie) {
+			pr_err("Unable to register chg_panel_notifier\n");
+		} else {
+			pr_err("success register chg_panel_notifier\n");
+			g_ssc_cxt->notify_work_regiseted = true;
+			g_ssc_cxt->notifier_cookie = cookie;
+		}
+	} else {
+		pr_err("can't find active panel, rc=%d\n", rc);
+	}
+
+	if (!g_ssc_cxt->notify_work_regiseted && g_ssc_cxt->notify_work_retry > 0) {
+		g_ssc_cxt->notify_work_retry--;
+		schedule_delayed_work(&g_ssc_cxt->regiseter_lcd_notify_work, msecs_to_jiffies(1000));
+	}
+	return;
+}
+#endif
 
 static int __init ssc_interactive_init(void)
 {
 	int err = 0;
+	uint32_t lb_value = 0;
 	struct ssc_interactive *ssc_cxt = kzalloc(sizeof(*ssc_cxt), GFP_KERNEL);
+	struct device_node *lb_chek = NULL;
+	of_property_read_u32(lb_chek, "use_lb_algo", &lb_value);
 
 	g_ssc_cxt = ssc_cxt;
 
@@ -337,9 +442,18 @@ static int __init ssc_interactive_init(void)
 		goto register_mdevice_failed;
 	}
 
-	ssc_cxt->nb.notifier_call = lcdinfo_callback;
+#if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY)
+	ssc_cxt->notify_work_retry = 10;
+	ssc_cxt->notify_work_regiseted = false;
+	INIT_DELAYED_WORK(&ssc_cxt->regiseter_lcd_notify_work, ssc_regiseter_lcd_notify_work);
+	schedule_delayed_work(&ssc_cxt->regiseter_lcd_notify_work, msecs_to_jiffies(1500));
+#else
+	if (lb_value) {
+		ssc_cxt->nb.notifier_call = lcdinfo_callback;
+		register_lcdinfo_notifier(&ssc_cxt->nb);
+	}
+#endif
 
-	register_lcdinfo_notifier(&ssc_cxt->nb);
 	err = sysfs_create_group(&ssc_cxt->mdev.this_device->kobj, &ssc_interactive_attribute_group);
 
 	if (err < 0) {
@@ -370,7 +484,13 @@ static void __exit ssc_interactive_exit(void)
 {
 	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
 	sysfs_remove_group(&ssc_cxt->mdev.this_device->kobj, &ssc_interactive_attribute_group);
+#if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY)
+	if (ssc_cxt->active_panel && ssc_cxt->notifier_cookie) {
+		panel_event_notifier_unregister(ssc_cxt->notifier_cookie);
+	}
+#else
 	unregister_lcdinfo_notifier(&ssc_cxt->nb);
+#endif
 	misc_deregister(&ssc_cxt->mdev);
 	kfifo_free(&ssc_cxt->fifo);
 	kfree(ssc_cxt);

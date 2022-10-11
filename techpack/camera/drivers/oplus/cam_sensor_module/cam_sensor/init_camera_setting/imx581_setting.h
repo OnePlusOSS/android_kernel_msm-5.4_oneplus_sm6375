@@ -4,6 +4,7 @@
 	{
 		{.reg_addr = 0x0136, .reg_data = 0x18, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0137, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
+		{.reg_addr = 0x0101, .reg_data = 0x03, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x3C7E, .reg_data = 0x02, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x3C7F, .reg_data = 0x0A, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0111, .reg_data = 0x02, .delay = 0x00, .data_mask = 0xff}, \
@@ -172,8 +173,9 @@
 		{.reg_addr = 0xAE16, .reg_data = 0x10, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0xAF05, .reg_data = 0x48, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0xB07C, .reg_data = 0x02, .delay = 0x00, .data_mask = 0xff}, \
+		{.reg_addr = 0x0106, .reg_data = 0x01, .delay = 0x00, .data_mask = 0xff}, \
 	},
-    .size = 170,
+    .size = 172,
     .addr_type = CAMERA_SENSOR_I2C_TYPE_WORD,
     .data_type = CAMERA_SENSOR_I2C_TYPE_BYTE,
     .delay = 1,

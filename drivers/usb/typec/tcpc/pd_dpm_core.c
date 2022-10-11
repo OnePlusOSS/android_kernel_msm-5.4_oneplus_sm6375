@@ -232,6 +232,9 @@ static bool dpm_response_request(struct pd_port *pd_port, bool accept)
 static void dpm_build_sink_pdo_info(struct dpm_pdo_info_t *sink_pdo_info,
 		uint8_t type, int request_v, int request_i)
 {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	memset(sink_pdo_info, 0, sizeof(*sink_pdo_info));
+#endif
 	sink_pdo_info->type = type;
 
 #ifdef CONFIG_USB_PD_REV30_PPS_SINK
@@ -246,6 +249,34 @@ static void dpm_build_sink_pdo_info(struct dpm_pdo_info_t *sink_pdo_info,
 	sink_pdo_info->ma = request_i;
 	sink_pdo_info->uw = request_v * request_i;
 }
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static bool dpm_build_request_info_with_new_src_cap(
+		struct pd_port *pd_port, struct dpm_rdo_info_t *req_info,
+		struct pd_port_power_caps *src_cap, uint8_t charging_policy)
+{
+	bool find_cap = false;
+	uint8_t sel = pd_port->pe_data.local_selected_cap;
+	struct dpm_pdo_info_t sink, source;
+
+	if (sel > src_cap->nr)
+		return false;
+
+	dpm_extract_pdo_info(src_cap->pdos[sel-1], &source);
+
+	dpm_build_sink_pdo_info(&sink, source.type,
+			pd_port->request_v, pd_port->request_i);
+
+	find_cap = dpm_find_match_req_info(req_info,
+			&sink, src_cap->nr, src_cap->pdos,
+			-1, charging_policy);
+
+	if (find_cap)
+		pd_port->pe_data.local_selected_cap = req_info->pos;
+
+	return find_cap;
+}
+#endif
 
 #ifdef CONFIG_USB_PD_REV30_PPS_SINK
 static int pps_request_thread_fn(void *data)
@@ -296,14 +327,28 @@ static bool dpm_build_request_info_apdo(
 		struct pd_port *pd_port, struct dpm_rdo_info_t *req_info,
 		struct pd_port_power_caps *src_cap, uint8_t charging_policy)
 {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	bool find_cap = false;
+#endif
 	struct dpm_pdo_info_t sink_pdo_info;
 
 	dpm_build_sink_pdo_info(&sink_pdo_info, DPM_PDO_TYPE_APDO,
 			pd_port->request_v_apdo, pd_port->request_i_apdo);
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	find_cap = dpm_find_match_req_info(req_info,
+			&sink_pdo_info, src_cap->nr, src_cap->pdos,
+			-1, charging_policy);
+
+	if (find_cap)
+		pd_port->pe_data.local_selected_cap = req_info->pos;
+
+	return find_cap;
+#else
 	return dpm_find_match_req_info(req_info,
 			&sink_pdo_info, src_cap->nr, src_cap->pdos,
 			-1, charging_policy);
+#endif
 }
 #endif	/* CONFIG_USB_PD_REV30_PPS_SINK */
 
@@ -348,6 +393,9 @@ static bool dpm_build_request_info(
 	uint8_t charging_policy = pd_port->dpm_charging_policy;
 	struct pd_port_power_caps *src_cap = &pd_port->pe_data.remote_src_cap;
 	struct tcpc_device __maybe_unused *tcpc = pd_port->tcpc;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct pd_event *pd_event = pd_get_curr_pd_event(pd_port);
+#endif
 
 	memset(req_info, 0, sizeof(struct dpm_rdo_info_t));
 
@@ -355,6 +403,15 @@ static bool dpm_build_request_info(
 
 	for (i = 0; i < src_cap->nr; i++)
 		DPM_DBG("SrcCap%d: 0x%08x\n", i+1, src_cap->pdos[i]);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (pd_event_data_msg_match(pd_event, PD_DATA_SOURCE_CAP) &&
+		pd_port->pe_data.explicit_contract) {
+		if (dpm_build_request_info_with_new_src_cap(
+				pd_port, req_info, src_cap, charging_policy))
+			return true;
+	}
+#endif
 
 #ifdef CONFIG_USB_PD_REV30_PPS_SINK
 	if ((charging_policy & DPM_CHARGING_POLICY_MASK)

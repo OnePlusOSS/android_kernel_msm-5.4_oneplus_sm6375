@@ -119,3 +119,8 @@ obj-$(CONFIG_OPLUS_FEATURE_APP_MONITOR) += oplus_apps_monitor/
 
 # ShiQianhua@NETWORK.DATA.2341538 2021/10/18 add for network modules
 obj-y                           += oplus_modules/
+
+#ifdef OPLUS_FEATURE_WIFI_CAPCENTER
+obj-$(CONFIG_OPLUS_FEATURE_WIFI_CAPCENTER) += oplus_wificapcenter/
+#endif /* OPLUS_FEATURE_WIFI_CAPCENTER */
+

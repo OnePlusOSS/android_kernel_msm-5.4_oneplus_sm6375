@@ -707,6 +707,14 @@ static int va_macro_tx_va_mclk_enable(struct va_macro_priv *va_priv,
 				dev_err_ratelimited(va_priv->dev,
 					"%s: swr request clk failed\n",
 					__func__);
+#ifdef OPLUS_ARCH_EXTENDS
+				//Nan.Zhong@MULTIMEDIA.AUDIODRIVER.CODEC, 2021/12/02, add for qcom workaround solve wcd not work after adsp ssr
+				if (va_priv->swr_clk_users == 0) {
+					pr_err("%s:: disable va_swr_gpio\n", __func__);
+					msm_cdc_pinctrl_select_sleep_state(
+				                    va_priv->va_swr_gpio_p);
+				}
+#endif /* OPLUS_ARCH_EXTENDS */
 				goto done;
 			}
 		}

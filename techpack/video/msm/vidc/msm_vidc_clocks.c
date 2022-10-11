@@ -290,6 +290,7 @@ int msm_comm_set_buses(struct msm_vidc_core *core, u32 sid)
 	int rc = 0;
 	struct msm_vidc_inst *inst = NULL;
 	struct hfi_device *hdev;
+	bool is_secureCmp = false;
 	unsigned long total_bw_ddr = 0, total_bw_llcc = 0;
 	u64 curr_time_ns;
 
@@ -328,6 +329,10 @@ int msm_comm_set_buses(struct msm_vidc_core *core, u32 sid)
 			continue;
 		}
 
+		if(inst->flags & VIDC_SECURE) {
+		    is_secureCmp = true; //true if secure comp present in component list
+		}
+
 		if (inst->bus_data.power_mode == VIDC_POWER_TURBO) {
 			total_bw_ddr = total_bw_llcc = INT_MAX;
 			break;
@@ -335,6 +340,12 @@ int msm_comm_set_buses(struct msm_vidc_core *core, u32 sid)
 		total_bw_ddr += inst->bus_data.calc_bw_ddr;
 		total_bw_llcc += inst->bus_data.calc_bw_llcc;
 	}
+	/* Customization Start*/
+	//customize only if atleast one secure is present
+    if (is_secureCmp && total_bw_ddr < INT_MAX / 128) {
+    	total_bw_ddr = INT_MAX / 128;
+    }
+    /* Customization End*/
 	mutex_unlock(&core->lock);
 
 	rc = call_hfi_op(hdev, vote_bus, hdev->hfi_device_data,

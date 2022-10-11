@@ -33,6 +33,8 @@ enum limit_type {
 	LIMIT_TYPE_TOP_FLOOR_DATA          = 0x06,     /*means all nodes limit data is a certain data*/
 	LIMIT_TYPE_DOZE_FDM_DATA           = 0x07,     /*means all nodes limit data is a certain data*/
 	LIMIT_TYPE_TOP_FLOOR_RX_TX_DATA    = 0x08,     /*means all nodes limit data is a certain data*/
+	LIMIT_TYPE_PEN_X_DATA              = 0x09,            /*for pen test x data*/
+	LIMIT_TYPE_PEN_Y_DATA              = 0x0A,            /*for pen test y data*/
 	LIMIT_TYPE_INVALID_DATA            = 0xFF,            /*means wrong limit data type*/
 };
 
@@ -96,8 +98,8 @@ int32_t *getpara_for_item(const struct firmware *fw, uint8_t item_index,
 struct test_item_info *get_test_item_info(const struct firmware *fw,
 		uint8_t item_index);
 int save_test_result(struct auto_testdata *p_auto_testdata,
-		     uint8_t  *data, enum limit_type limit_type,
-		     char  *limit_name);
+		      short *data, int data_size, enum limit_type limit_type,
+		      char *limit_name);
 ssize_t tp_test_write(void *data_start, size_t max_count,
 		      const char *buf, size_t count, ssize_t *pos);
 

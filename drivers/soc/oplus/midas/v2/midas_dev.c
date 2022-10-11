@@ -99,6 +99,10 @@ static int rasm_resume(struct device *dev) {
 	int i;
 
 	data = dev->driver_data;
+	if (!data) {
+		pr_err("rasm_data is empty");
+		return 0;
+	}
 	do_gettimeofday(&resume_time);
 	data->last_resume_time = resume_time.tv_sec;
 	data->last_resume_millsec_time = resume_time.tv_sec * 1000 + resume_time.tv_usec / 1000;
@@ -128,6 +132,10 @@ static int rasm_suspend(struct device *dev) {
 	struct rasm_data *data;
 
 	data = dev->driver_data;
+	if (!data) {
+		pr_err("rasm_data is empty");
+		return 0;
+	}
 	do_gettimeofday(&suspend_time);
 	data->last_suspend_time = suspend_time.tv_sec;
 	data->last_suspend_millsec_time = suspend_time.tv_sec * 1000 + suspend_time.tv_usec / 1000;

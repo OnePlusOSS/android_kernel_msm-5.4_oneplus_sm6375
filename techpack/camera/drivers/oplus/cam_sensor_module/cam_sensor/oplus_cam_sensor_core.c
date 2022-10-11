@@ -12,6 +12,9 @@
 #include "cam_packet_util.h"
 #include "oplus_cam_sensor_core.h"
 #include "cam_sensor_core.h"
+#include "../cam_flash/oplus_cam_flash_dev.h"
+
+extern struct cam_flash_settings flash_ftm_data;
 
 #define MAX_LENGTH 128
 

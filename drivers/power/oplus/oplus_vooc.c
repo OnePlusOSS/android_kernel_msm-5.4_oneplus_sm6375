@@ -2579,7 +2579,8 @@ static int oplus_vooc_convert_fast_chg_type(int fast_chg_type)
 			if (oplus_voocphy_get_dual_cp_support() == false) {
 				fastchg_pwr_type = FASTCHG_POWER_11V3A_FLASHCHARGER;
 			} else {
-				if (oplus_is_vooc_project() == 6) {
+				if (oplus_is_vooc_project() == FASTCHG_VERSION_10V6A_DUAL_CP_SVOOC
+					|| oplus_is_vooc_project() == FASTCHG_VERSION_11V6P1A_SINGLE_BAT_SVOOC) {
 					fastchg_pwr_type = FASTCHG_POWER_10V6A_DUAL_CP_SVOOC;
 				} else {
 					fastchg_pwr_type = FASTCHG_POWER_10V5A_DUAL_CP_SVOOC;

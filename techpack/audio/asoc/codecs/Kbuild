@@ -267,6 +267,12 @@ ifeq ($(KERNEL_BUILD), 1)
 	ifdef CONFIG_SND_SOC_SIA81XX
 		obj-y	+= sia81xx/
 	endif
+	ifdef CONFIG_SND_SOC_AW882XX
+		obj-y	+= aw882xx/
+	endif
+	ifdef CONFIG_SND_SOC_AW87XXX
+		obj-y	+= aw87390/
+	endif
 	#endif
 	#ifdef OPLUS_ARCH_EXTENDS
 	ifdef CONFIG_SND_SOC_TFA98XX

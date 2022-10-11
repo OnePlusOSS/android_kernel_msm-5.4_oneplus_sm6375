@@ -485,11 +485,36 @@ static DEFINE_MUTEX(tdm_mutex);
 static atomic_t tdm_group_ref[IDX_GROUP_TDM_MAX];
 
 static struct afe_param_id_tdm_lane_cfg tdm_lane_cfg = {
+#ifdef CONFIG_SND_SOC_AW882XX
+	AFE_GROUP_DEVICE_ID_SECONDARY_TDM_RX,
+#else
 	AFE_GROUP_DEVICE_ID_QUINARY_TDM_RX,
+#endif
 	0x0,
 };
 
 /* cache of group cfg per parent node */
+#ifdef CONFIG_SND_SOC_AW882XX
+static struct afe_param_id_group_device_tdm_cfg tdm_group_cfg = {
+	AFE_API_VERSION_GROUP_DEVICE_TDM_CONFIG,
+	AFE_GROUP_DEVICE_ID_SECONDARY_TDM_RX,
+	0,
+	{AFE_PORT_ID_SECONDARY_TDM_RX,
+	AFE_PORT_ID_SECONDARY_TDM_RX_1,
+	AFE_PORT_ID_SECONDARY_TDM_RX_2,
+	AFE_PORT_ID_SECONDARY_TDM_RX_3,
+	AFE_PORT_ID_SECONDARY_TDM_RX_4,
+	AFE_PORT_ID_SECONDARY_TDM_RX_5,
+	AFE_PORT_ID_SECONDARY_TDM_RX_6,
+	AFE_PORT_ID_SECONDARY_TDM_RX_7},
+	8,
+	48000,
+	32,
+	8,
+	32,
+	0xFF,
+};
+#else
 static struct afe_param_id_group_device_tdm_cfg tdm_group_cfg = {
 	AFE_API_VERSION_GROUP_DEVICE_TDM_CONFIG,
 	AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_RX,
@@ -509,6 +534,7 @@ static struct afe_param_id_group_device_tdm_cfg tdm_group_cfg = {
 	32,
 	0xFF,
 };
+#endif
 
 static u32 num_tdm_group_ports;
 
@@ -11373,7 +11399,11 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 			 * if only one port, don't do group enable as there
 			 * is no group need for only one port
 			 */
+#ifdef CONFIG_SND_SOC_AW882XX
+			if (dai_data->num_group_ports >= 1) {
+#else
 			if (dai_data->num_group_ports > 1) {
+#endif
 				rc = afe_port_group_enable(group_id,
 					&dai_data->group_cfg, true,
 					&dai_data->lane_cfg);

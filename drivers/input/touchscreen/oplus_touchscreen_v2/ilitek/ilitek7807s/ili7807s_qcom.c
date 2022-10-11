@@ -3713,11 +3713,17 @@ static void ilitek_free_global_data(void)
 		return;
 	}
 
-	ili_irq_disable();
-	devm_free_irq(ilits->dev, ilits->irq_num, NULL);
+	if (ilits->irq_num) {
+		ili_irq_disable();
+		devm_free_irq(ilits->dev, ilits->irq_num, NULL);
+	}
 	mutex_lock(&ilits->touch_mutex);
-	gpio_free(ilits->tp_int);
-	gpio_free(ilits->tp_rst);
+	if (ilits->tp_int) {
+		gpio_free(ilits->tp_int);
+	}
+	if (ilits->tp_rst) {
+		gpio_free(ilits->tp_rst);
+	}
 
 	if (ilits->ws) {
 		wakeup_source_unregister(ilits->ws);
@@ -3729,7 +3735,7 @@ static void ilitek_free_global_data(void)
 	ili_kfree((void **)&ilits->spi_tx);
 	ili_kfree((void **)&ilits->spi_rx);
 	mutex_unlock(&ilits->touch_mutex);
-	ili_kfree((void **)&ilits);
+	devm_kfree(ilits->dev, ilits);
 }
 
 

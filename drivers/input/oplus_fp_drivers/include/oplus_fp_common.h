@@ -52,8 +52,12 @@ typedef enum {
     FP_FPC_1541 = 17,
     FP_EGIS_520 = 18,
     FP_FPC_1542 = 19,
+    FP_SILEAD_6150 = 21,
+    FP_SILEAD_6157 = 22,
     FP_JIIOV_0301 = 23,
     FP_GOODIX_3956 = 27,
+    FP_SILEAD_6159 = 29,
+    FP_JIIOV_0101 = 31,
     FP_UNKNOWN,
 } fp_vendor_t;
 

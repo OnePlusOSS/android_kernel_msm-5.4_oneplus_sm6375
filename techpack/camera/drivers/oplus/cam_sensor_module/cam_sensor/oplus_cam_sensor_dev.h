@@ -32,6 +32,12 @@ struct cam_sensor_settings {
 	struct cam_sensor_i2c_reg_setting_array ov16a1q_setting;
 	struct cam_sensor_i2c_reg_setting_array imx581_setting;
 	struct cam_sensor_i2c_reg_setting_array s5kjn1sq_setting;
+	struct cam_sensor_i2c_reg_setting_array hi1336_setting;
+	struct cam_sensor_i2c_reg_setting_array sc800cs_setting;
+	struct cam_sensor_i2c_reg_setting_array sc1300cs_setting;
+	struct cam_sensor_i2c_reg_setting_array s5k3p9sp_setting;
+	struct cam_sensor_i2c_reg_setting_array sc201cs_depth_setting;
+	struct cam_sensor_i2c_reg_setting_array sc201cs_micro_setting;
 };
 
 long oplus_cam_sensor_subdev_ioctl(struct v4l2_subdev *sd,

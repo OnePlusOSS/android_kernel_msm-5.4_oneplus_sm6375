@@ -9,11 +9,16 @@
  */
 
 #include "oplus_sensor_devinfo.h"
+#include <linux/version.h>
+#include <linux/pinctrl/consumer.h>
+#include <linux/gpio.h>
+
 #define CLOSE_PD  1
 #define CLOSE_PD_CONDITION 2
-
+#define ALIGN4(s) ((sizeof(s) + 3)&(~0x3))
 #define SAR_MAX_CH_NUM 5
-#define MAG_PARA_OFFSET 8
+
+#define ALS_DEFAULT_PROPERTY_VALUE 1000
 
 extern int oplus_press_cali_data_init(void);
 extern void oplus_press_cali_data_clean(void);
@@ -25,11 +30,14 @@ struct sensor_info * g_chip = NULL;
 
 struct proc_dir_entry *sensor_proc_dir = NULL;
 static struct oplus_als_cali_data *gdata = NULL;
+static uint32_t g_ldo_enable;
 
-struct oplus_mag_para_data {
-	struct proc_dir_entry *proc_mag_para;
+
+
+static char *als_rear_feature[] = {
+	"als-factor",
 };
-static struct oplus_mag_para_data *m_data = NULL;
+
 
 __attribute__((weak)) void oplus_device_dir_redirect(struct sensor_info * chip)
 {
@@ -265,6 +273,7 @@ static void parse_light_sensor_dts(struct sensor_hw *hw, struct device_node *ch_
 		"als_buffer_length",
 		"normalization_value",
 		"use_lb_algo",
+		"para-matrix",
 		"als_ratio_type"
 	};
 
@@ -275,25 +284,42 @@ static void parse_light_sensor_dts(struct sensor_hw *hw, struct device_node *ch_
 		"coef_d",
 		"coef_e",
 		"coef_ratio",
-		"gold-reset-scale" /* gold scale value after sale */
+		"gold-reset-scale", /*gold scale value after sale*/
+		/*lb para begin*/
+		"lcd_type",
+		"linear_comp_scope",
+		"linear_comp_intercept",
+		"temp_lux",
+		"coef",
+		"bal_coef",
+		"ir_coef_stage_0",
+		"ir_coef_stage_1",
+		"ir_coef_stage_2",
+		"ir_coef_stage_3",
+		"ir_coef_val_0",
+		"ir_coef_val_1",
+		"ir_coef_val_2",
+		"ir_coef_val_3",
+		"ir_coef_val_4",
+		"lb-dbv-coefs-id",
+		"light-cut",
+		/*lb para end*/
 	};
-
-	gdata->row_coe = 1000;
 
 	for (di = 0; di < ARRAY_SIZE(als_feature); di++) {
 		rc = of_property_read_u32(ch_node, als_feature[di], &value);
 
 		if (!rc) {
 			hw->feature.feature[di] = value;
-
-			if (!strncmp(als_feature[di], "als-factor", 10)) {
-				gdata->row_coe = value;
-			}
+		} else if (0 == strncmp(als_feature[di], "norm", 4)) {
+			hw->feature.feature[di] = 1057;
+		} else if (0 == strncmp(als_feature[di], "als_ratio_type", strlen("als_ratio_type"))) {
+			hw->feature.feature[di] = 0; /*set defaut zero*/
 		} else {
 			pr_info("parse %s failed!", als_feature[di]);
 		}
 
-		SENSOR_DEVINFO_DEBUG("feature[%d] : %d\n", di, hw->feature.feature[di]);
+		SENSOR_DEVINFO_DEBUG("light feature[%s] : %d\n", als_feature[di], hw->feature.feature[di]);
 	}
 
 	for (di = 0; di < ARRAY_SIZE(light_para); di++) {
@@ -302,14 +328,30 @@ static void parse_light_sensor_dts(struct sensor_hw *hw, struct device_node *ch_
 		if (!rc) {
 			hw->feature.parameter[di] = value;
 		} else if (0 == strncmp(light_para[di], "gold-reset-scale", strlen("gold-reset-scale"))) {
-			hw->feature.parameter[di] = 1001; /* set defaut value 1001 */
-		} else if (0 == strncmp(als_feature[di], "als_ratio_type", strlen("als_ratio_type"))) {
-			hw->feature.feature[di] = 0;   /*set defaut zero*/
+			hw->feature.parameter[di] = 1001; /*set defaut value 1001*/
 		} else {
 			hw->feature.parameter[di] = 0; /* set defaut param */
 			pr_info("parse %s failed!", light_para[di]);
 		}
 		SENSOR_DEVINFO_DEBUG("light_para[%s] : %d\n", light_para[di], hw->feature.parameter[di]);
+	}
+}
+static void parse_light_rear_sensor_dts(struct sensor_hw *hw, struct device_node *ch_node)
+{
+	int rc = 0;
+	int value = 0;
+	int di = 0;
+
+	for (di = 0; di < ARRAY_SIZE(als_rear_feature); di++) {
+		rc = of_property_read_u32(ch_node, als_rear_feature[di], &value);
+
+		if (!rc) {
+			hw->feature.feature[di] = value;
+		} else {
+			pr_info("parse %s failed!", als_rear_feature[di]);
+		}
+
+		SENSOR_DEVINFO_DEBUG("parse_light_rear_sensor_dts-feature[%d] : %d\n", di, hw->feature.feature[di]);
 	}
 }
 
@@ -318,26 +360,17 @@ static void parse_sar_sensor_dts(struct sensor_hw *hw, struct device_node *ch_no
 	int di = 0;
 	int rc = 0;
 	int value = 0;
-	int reg_array[PARAMETER_NUM * 2] = {0};
 	int dc_offset_default[SAR_MAX_CH_NUM * 2] = {0, 0, 0, 0, 0, 30000, 30000, 30000, 30000, 30000};
-
-	/* sensor name */
-	rc = of_property_read_u32(ch_node, "sensor-name", &value);
-	SENSOR_DEVINFO_DEBUG("sar sensor-name: %d\n", value);
-
-	/* parameter->reg */
 	rc = of_property_read_u32(ch_node, "parameter-number", &value);
-	if (!rc && value > 0 && value < PARAMETER_NUM * 2) {
+	if (!rc && value > 0 && value < PARAMETER_NUM) {
 		rc = of_property_read_u32_array(ch_node,
-				"sensor-reg", &reg_array[0], value);
-
+			"sensor-reg", &hw->feature.parameter[0], value);
 		for (di = 0; di < value / 2; di++) {
-			SENSOR_DEVINFO_DEBUG("sar sensor reg 0x%x = 0x%x\n", reg_array[di * 2],
-				reg_array[2 * di + 1]);
-			hw->feature.parameter[di] = reg_array[di * 2] << 16 | reg_array[2 * di + 1];
+			SENSOR_DEVINFO_DEBUG("sensor reg 0x%x = 0x%x\n", hw->feature.parameter[di * 2],
+				hw->feature.parameter[2 * di + 1]);
 		}
 	} else {
-		pr_info("parse sar sensor reg failed, rc %d, num %d", rc, value);
+			pr_info("parse sar sensor reg failed\n");
 	}
 
 	/* channel-num */
@@ -372,53 +405,21 @@ static void parse_down_sar_sensor_dts(struct sensor_hw *hw, struct device_node *
 	int di = 0;
 	int rc = 0;
 	int value = 0;
-	int reg_array[PARAMETER_NUM * 2] = {0};
-	int dc_offset_default[SAR_MAX_CH_NUM * 2] = {0, 0, 0, 0, 0, 30000, 30000, 30000, 30000, 30000};
-
-	/* sensor name */
-	rc = of_property_read_u32(ch_node, "sensor-name", &value);
-	SENSOR_DEVINFO_DEBUG("sar sensor-name: %d\n", value);
-
-	/* parameter->reg */
 	rc = of_property_read_u32(ch_node, "parameter-number", &value);
-	if (!rc && value > 0 && value < PARAMETER_NUM * 2) {
+
+	if (!rc && value > 0 && value < PARAMETER_NUM) {
 		rc = of_property_read_u32_array(ch_node,
-				"sensor-reg", &reg_array[0], value);
+				"sensor-reg", &hw->feature.parameter[0], value);
 
 		for (di = 0; di < value / 2; di++) {
-			SENSOR_DEVINFO_DEBUG("sar sensor reg 0x%x = 0x%x\n", reg_array[di * 2],
-				reg_array[2 * di + 1]);
-			hw->feature.parameter[di] = reg_array[di * 2] << 16 | reg_array[2 * di + 1];
+			SENSOR_DEVINFO_DEBUG("sensor reg 0x%x = 0x%x\n", hw->feature.parameter[di * 2],
+				hw->feature.parameter[2 * di + 1]);
 		}
+
 	} else {
-		pr_info("parse sar sensor reg failed, rc %d, num %d", rc, value);
+		pr_info("parse down-sar sensor reg failed\n");
 	}
 
-	/* channel-num */
-	rc = of_property_read_u32(ch_node, "channel-num", &value);
-	if (!rc && value < SAR_MAX_CH_NUM) {
-		hw->feature.feature[di] = value;
-		SENSOR_DEVINFO_DEBUG("sar channel-num: %d\n", value);
-	} else {
-		pr_info("parse sar sensor channel-num failed, rc %d, value %d", rc, value);
-	}
-
-	/* reg->dc_offset */
-	rc = of_property_read_u32(ch_node, "is-dc-offset", &value);
-	if (!rc && value == 1) {
-		memcpy((void *)&hw->feature.reg[0], (void *)&dc_offset_default[0], SAR_MAX_CH_NUM * 2);
-		for (di = 0; di < SAR_MAX_CH_NUM; di++) {
-			SENSOR_DEVINFO_DEBUG("sar dc_offset_l[%d] = %d, dc_offset_H[%d] = %d",
-				di, hw->feature.reg[di], di + SAR_MAX_CH_NUM, hw->feature.reg[di + SAR_MAX_CH_NUM]);
-		}
-		rc = of_property_read_u32_array(ch_node, "dc-offset", &hw->feature.reg[0], SAR_MAX_CH_NUM * 2);
-		for (di = 0; di < SAR_MAX_CH_NUM; di++) {
-			SENSOR_DEVINFO_DEBUG("sar dc_offset_l[%d] = %d, dc_offset_H[%d] = %d",
-				di, hw->feature.reg[di], di + SAR_MAX_CH_NUM, hw->feature.reg[di + SAR_MAX_CH_NUM]);
-		}
-	} else {
-		pr_info("parse sar sensor dc_offset failed, rc %d, value %d", rc, value);
-	}
 }
 
 static void parse_cct_sensor_dts(struct sensor_hw *hw, struct device_node *ch_node)
@@ -519,6 +520,28 @@ static void parse_cct_rear_sensor_dts(struct sensor_hw *hw, struct device_node *
 	}
 }
 
+static void parse_accelerometer_sensor_dts(struct sensor_hw *hw, struct device_node *ch_node)
+{
+	int value = 0;
+	int rc = 0;
+	int di = 0;
+	char *feature[] = {
+		"use-sois"
+	};
+
+	hw->feature.feature[0] = 0;/*default not use s-ois */
+
+	for (di = 0; di < ARRAY_SIZE(feature); di++) {
+		rc = of_property_read_u32(ch_node, feature[di], &value);
+
+		if (!rc) {
+			hw->feature.feature[di] = value;
+		}
+
+		SENSOR_DEVINFO_DEBUG("gsensor_feature[%d] : %d\n", di, hw->feature.feature[di]);
+	}
+}
+
 static void parse_each_physical_sensor_dts(struct sensor_hw *hw, struct device_node *ch_node)
 {
 	if (0 == strncmp(ch_node->name, "msensor", 7)) {
@@ -527,14 +550,18 @@ static void parse_each_physical_sensor_dts(struct sensor_hw *hw, struct device_n
 		parse_proximity_sensor_dts(hw, ch_node);
 	} else if (0 == strncmp(ch_node->name, "lsensor", 7)) {
 		parse_light_sensor_dts(hw, ch_node);
-	} else if (0 == strncmp(ch_node->name, "sarsensor", 7)) {
+	} else if (0 == strncmp(ch_node->name, "ssensor", 7)) {
 		parse_sar_sensor_dts(hw, ch_node);
 	} else if (0 == strncmp(ch_node->name, "cctsensor", 7)) {
 		parse_cct_sensor_dts(hw, ch_node);
 	} else if (0 == strncmp(ch_node->name, "cctrsensor", 7)) {
 		parse_cct_rear_sensor_dts(hw, ch_node);
-	} else if (0 == strncmp(ch_node->name, "sardownsensor", 7)) {
+	} else if (0 == strncmp(ch_node->name, "sdsensor", 7)) {
 		parse_down_sar_sensor_dts(hw, ch_node);
+	} else if (0 == strncmp(ch_node->name, "lrsensor", 7)) {
+		parse_light_rear_sensor_dts(hw, ch_node);
+	} else if (0 == strncmp(ch_node->name, "gsensor", 7)) {
+		parse_accelerometer_sensor_dts(hw, ch_node);
 	} else {
 		/* do nothing */
 	}
@@ -613,6 +640,27 @@ static void parse_mag_fusion_sensor_dts(struct sensor_algorithm *algo, struct de
 	SENSOR_DEVINFO_DEBUG("fusion-type :%d\n", algo->feature[0]);
 }
 
+static void parse_oplus_measurement_sensor_dts(struct sensor_algorithm *algo, struct device_node *ch_node)
+{
+	int rc = 0;
+	int value = 0;
+
+	rc = of_property_read_u32(ch_node, "acc-range", &value);
+
+	if (!rc) {
+		algo->parameter[0] = value;
+	}
+
+	rc = of_property_read_u32(ch_node, "gyro-range", &value);
+
+	if (!rc) {
+		algo->parameter[1] = value;
+	}
+
+	SENSOR_DEVINFO_DEBUG("acc-range: %d, gyro-range: %d\n",
+		algo->parameter[0], algo->parameter[1]);
+}
+
 static void parse_each_virtual_sensor_dts(struct sensor_algorithm *algo, struct device_node * ch_node)
 {
 	if (0 == strncmp(ch_node->name, "pickup", 6)) {
@@ -623,6 +671,8 @@ static void parse_each_virtual_sensor_dts(struct sensor_algorithm *algo, struct 
 		parse_fp_display_sensor_dts(algo, ch_node);
 	} else if (0 == strncmp(ch_node->name, "mag_fusion", 10)) {
 		parse_mag_fusion_sensor_dts(algo, ch_node);
+	} else if (0 == strncmp(ch_node->name, "oplus_measurement", 17)) {
+		parse_oplus_measurement_sensor_dts(algo, ch_node);
 	} else {
 		/* do nothing */
 	}
@@ -690,6 +740,51 @@ static void oplus_sensor_parse_dts(struct platform_device *pdev)
 		}
 	}/* for_each_child_of_node */
 
+	rc = of_property_read_u32(node, "als-row-coe", &value);
+
+	if (rc) {
+		gdata->row_coe = ALS_DEFAULT_PROPERTY_VALUE;
+	} else {
+		gdata->row_coe = value;
+	}
+	rc = of_property_read_u32(node, "als-dev_coef_1", &value);
+
+	if (rc) {
+		gdata->dev_coef_1 = ALS_DEFAULT_PROPERTY_VALUE;
+	} else {
+		gdata->dev_coef_1 = value == ALS_DEFAULT_PROPERTY_VALUE ?
+				ALS_DEFAULT_PROPERTY_VALUE - 1 : value;
+	}
+
+	rc = of_property_read_u32(node, "als-dev_coef_2", &value);
+
+	if (rc) {
+		gdata->dev_coef_2 = ALS_DEFAULT_PROPERTY_VALUE;
+	} else {
+		gdata->dev_coef_2 = value == ALS_DEFAULT_PROPERTY_VALUE ?
+				ALS_DEFAULT_PROPERTY_VALUE - 1 : value;
+	}
+
+	rc = of_property_read_u32(node, "als-dev_coef_h2l", &value);
+
+	if (rc) {
+		gdata->dev_coef_h2l = ALS_DEFAULT_PROPERTY_VALUE;
+	} else {
+		gdata->dev_coef_h2l = value == ALS_DEFAULT_PROPERTY_VALUE ?
+				ALS_DEFAULT_PROPERTY_VALUE - 1 : value;
+	}
+
+	rc = of_property_read_u32(node, "als-dev_coef_l2h", &value);
+
+	if (rc) {
+		gdata->dev_coef_l2h = ALS_DEFAULT_PROPERTY_VALUE;
+	} else {
+		gdata->dev_coef_l2h = value == ALS_DEFAULT_PROPERTY_VALUE ?
+				ALS_DEFAULT_PROPERTY_VALUE - 1 : value;
+	}
+
+	rc = of_property_read_u32(node, "ldo_enable", &g_ldo_enable);
+
 	oplus_device_dir_redirect(chip);
 }
 
@@ -718,10 +813,6 @@ static ssize_t als_type_read_proc(struct file *file, char __user *buf,
 	*off += len < count ? len : count;
 	return (len < count ? len : count);
 }
-
-static struct file_operations als_type_fops = {
-	.read = als_type_read_proc,
-};
 
 static ssize_t red_max_lux_read_proc(struct file *file, char __user *buf,
 	size_t count, loff_t *off)
@@ -787,10 +878,7 @@ static ssize_t red_max_lux_write_proc(struct file *file, const char __user *buf,
 
 	return count;
 }
-static struct file_operations red_max_lux_fops = {
-	.read = red_max_lux_read_proc,
-	.write = red_max_lux_write_proc,
-};
+
 static ssize_t white_max_lux_read_proc(struct file *file, char __user *buf,
 	size_t count, loff_t *off)
 {
@@ -855,10 +943,7 @@ static ssize_t white_max_lux_write_proc(struct file *file, const char __user *bu
 
 	return count;
 }
-static struct file_operations white_max_lux_fops = {
-	.read = white_max_lux_read_proc,
-	.write = white_max_lux_write_proc,
-};
+
 static ssize_t blue_max_lux_read_proc(struct file *file, char __user *buf,
 	size_t count, loff_t *off)
 {
@@ -922,11 +1007,6 @@ static ssize_t blue_max_lux_write_proc(struct file *file, const char __user *buf
 
 	return count;
 }
-
-static struct file_operations blue_max_lux_fops = {
-	.read = blue_max_lux_read_proc,
-	.write = blue_max_lux_write_proc,
-};
 
 static ssize_t green_max_lux_read_proc(struct file *file, char __user *buf,
 	size_t count, loff_t *off)
@@ -994,11 +1074,6 @@ static ssize_t green_max_lux_write_proc(struct file *file, const char __user *bu
 	return count;
 }
 
-static struct file_operations green_max_lux_fops = {
-	.read = green_max_lux_read_proc,
-	.write = green_max_lux_write_proc,
-};
-
 static ssize_t cali_coe_read_proc(struct file *file, char __user *buf,
 	size_t count, loff_t *off)
 {
@@ -1063,11 +1138,6 @@ static ssize_t cali_coe_write_proc(struct file *file, const char __user *buf,
 
 	return count;
 }
-
-static struct file_operations cali_coe_fops = {
-	.read = cali_coe_read_proc,
-	.write = cali_coe_write_proc,
-};
 
 static ssize_t row_coe_read_proc(struct file *file, char __user *buf,
 	size_t count, loff_t *off)
@@ -1134,10 +1204,149 @@ static ssize_t row_coe_write_proc(struct file *file, const char __user *buf,
 	return count;
 }
 
+static ssize_t dev_coef_read_proc(struct file *file, char __user *buf,
+	size_t count, loff_t *off)
+{
+	char page[256] = {0};
+	int len = 0;
+
+	if (!gdata) {
+		return -ENOMEM;
+	}
+
+	len = sprintf(page, "%d %d %d %d", gdata->dev_coef_1, gdata->dev_coef_2, gdata->dev_coef_h2l, gdata->dev_coef_l2h);
+
+	if (len > *off) {
+		len -= *off;
+	} else {
+		len = 0;
+	}
+
+	if (copy_to_user(buf, page, (len < count ? len : count))) {
+		return -EFAULT;
+	}
+
+	*off += len < count ? len : count;
+	return (len < count ? len : count);
+}
+
+static ssize_t dev_coef_write_proc(struct file *file, const char __user *buf,
+	size_t count, loff_t *off)
+
+{
+	char page[256] = {0};
+
+	if (!gdata) {
+		return -ENOMEM;
+	}
+
+
+	if (count > 256) {
+		count = 256;
+	}
+
+	if (count > *off) {
+		count -= *off;
+	} else {
+		count = 0;
+	}
+
+	if (copy_from_user(page, buf, count)) {
+		return -EFAULT;
+	}
+
+	*off += count;
+
+	if (sscanf(page, "%d %d %d %d", &gdata->dev_coef_1, &gdata->dev_coef_2, &gdata->dev_coef_h2l, &gdata->dev_coef_l2h) != 4) {
+		count = -EINVAL;
+		return count;
+	}
+
+	return count;
+}
+
+
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+static const struct proc_ops als_type_fops = {
+	.proc_read = als_type_read_proc,
+};
+
+static const struct proc_ops red_max_lux_fops = {
+	.proc_read = red_max_lux_read_proc,
+	.proc_write = red_max_lux_write_proc,
+};
+
+static const struct proc_ops white_max_lux_fops = {
+	.proc_read = white_max_lux_read_proc,
+	.proc_write = white_max_lux_write_proc,
+};
+
+static const struct proc_ops blue_max_lux_fops = {
+	.proc_read = blue_max_lux_read_proc,
+	.proc_write = blue_max_lux_write_proc,
+};
+
+static const struct proc_ops green_max_lux_fops = {
+	.proc_read = green_max_lux_read_proc,
+	.proc_write = green_max_lux_write_proc,
+};
+
+static const struct proc_ops cali_coe_fops = {
+	.proc_read = cali_coe_read_proc,
+	.proc_write = cali_coe_write_proc,
+};
+
+static const struct proc_ops row_coe_fops = {
+	.proc_read = row_coe_read_proc,
+	.proc_write = row_coe_write_proc,
+};
+
+static const struct proc_ops dev_coef_fops = {
+	.proc_read = dev_coef_read_proc,
+	.proc_write = dev_coef_write_proc,
+};
+
+#else
+static struct file_operations als_type_fops = {
+	.read = als_type_read_proc,
+};
+
+static struct file_operations red_max_lux_fops = {
+	.read = red_max_lux_read_proc,
+	.write = red_max_lux_write_proc,
+};
+
+static struct file_operations white_max_lux_fops = {
+	.read = white_max_lux_read_proc,
+	.write = white_max_lux_write_proc,
+};
+
+static struct file_operations blue_max_lux_fops = {
+	.read = blue_max_lux_read_proc,
+	.write = blue_max_lux_write_proc,
+};
+
+static struct file_operations green_max_lux_fops = {
+	.read = green_max_lux_read_proc,
+	.write = green_max_lux_write_proc,
+};
+
+static struct file_operations cali_coe_fops = {
+	.read = cali_coe_read_proc,
+	.write = cali_coe_write_proc,
+};
+
 static struct file_operations row_coe_fops = {
 	.read = row_coe_read_proc,
 	.write = row_coe_write_proc,
 };
+
+static struct file_operations dev_coef_fops = {
+	.read = dev_coef_read_proc,
+	.write = dev_coef_write_proc,
+};
+#endif
 
 static int oplus_als_cali_data_init()
 {
@@ -1213,6 +1422,16 @@ static int oplus_als_cali_data_init()
 		return rc;
 	}
 
+	pentry = proc_create("dev_coef", 0666, gdata->proc_oplus_als,
+			&dev_coef_fops);
+
+	if (!pentry) {
+		pr_err("create dev_coef_l2h proc failed.\n");
+		rc = -EFAULT;
+		return rc;
+	}
+
+
 	pentry = proc_create("als_type", 0666, gdata->proc_oplus_als,
 			&als_type_fops);
 
@@ -1225,124 +1444,40 @@ static int oplus_als_cali_data_init()
 	return 0;
 }
 
-static ssize_t mag_data_int2str(char *buf)
+static int sensor_ldo_init(struct device *dev)
 {
-	ssize_t pos = 0;
-	ssize_t len = 0;
-	int index_i, index_j;
-	int symble = 1;
+	int ldo;
+	struct device_node *np = dev->of_node;
+	struct pinctrl	   *gpio_pinctrl;
+	struct pinctrl_state *gpio_active;
+	struct pinctrl_state *gpio_sleep;
+	char * active = "sensor_ldo_active";
+	char * sleep  = "sensor_ldo_sleep";
 
-	pr_info("%s call\n", __func__);
-
-	for (index_i = 0; index_i < SOURCE_NUM; index_i++) {
-		for (index_j = 0; index_j < 9; index_j++) {
-			symble = g_chip->s_vector[OPLUS_MAG].hw[index_i].feature.parameter[index_j * 2 + 1] > 0 ? -1 : 1;
-			len = sprintf(buf + pos, "%d", g_chip->s_vector[OPLUS_MAG].hw[index_i].feature.parameter[index_j * 2] * symble);
-			if (len <= 0) {
-				return 0;
-			}
-			pos += MAG_PARA_OFFSET;
-		}
+	if (of_property_read_u32(np, "ldo-gpio", &ldo)) {
+		dev_err(dev, "%s: ldo-gpio init fail\n", __func__);
+		return -EINVAL;
+	}
+	gpio_pinctrl = devm_pinctrl_get(dev);
+	if (gpio_pinctrl == NULL) {
+		dev_err(dev, "%s: ldo_pinctrl init fail\n", __func__);
+		return -EINVAL;
 	}
 
-	pr_info("mag_data_int2str success, pos = %d.\n", pos);
-
-	return pos;
-}
-
-static ssize_t mag_para_read_proc(struct file *file, char __user *buf,
-	size_t count, loff_t *off)
-{
-	char page[256] = {0};
-	int len = 0;
-
-	pr_info("%s call\n", __func__);
-
-	if (!gdata) {
-		return -ENOMEM;
+	gpio_active = pinctrl_lookup_state(gpio_pinctrl, active);
+	if (gpio_active == NULL) {
+		dev_err(dev, "%s: ldo_active init fail\n", __func__);
+		return -EINVAL;
 	}
 
-	len = mag_data_int2str(page);
-
-	if (len > *off) {
-		len -= *off;
-	} else {
-		len = 0;
+	gpio_sleep = pinctrl_lookup_state(gpio_pinctrl, sleep);
+	if (gpio_sleep == NULL) {
+		dev_err(dev, "%s: ldo_sleep init fail\n", __func__);
+		return -EINVAL;
 	}
-
-	if (copy_to_user(buf, page, (len < count ? len : count))) {
-		return -EFAULT;
-	}
-
-	*off += len < count ? len : count;
-	return (len < count ? len : count);
-}
-
-static struct file_operations mag_para_fops = {
-	.read = mag_para_read_proc,
-};
-
-static int oplus_mag_para_init(void)
-{
-	int rc = 0;
-	struct proc_dir_entry *pentry;
-	struct oplus_mag_para_data *data = NULL;
-
-	pr_info("%s call\n", __func__);
-
-	if (m_data) {
-		printk("%s:just can be call one time\n", __func__);
-		return 0;
-	}
-
-	data = kzalloc(sizeof(struct oplus_mag_para_data), GFP_KERNEL);
-
-	if (data == NULL) {
-		rc = -ENOMEM;
-		printk("%s:kzalloc fail %d\n", __func__, rc);
-		return rc;
-	}
-
-	m_data = data;
-
-	if (m_data->proc_mag_para) {
-		printk("proc_oplus_mag_para has alread inited\n");
-		return 0;
-	}
-
-	m_data->proc_mag_para =  proc_mkdir("mag_para", sensor_proc_dir);
-
-	if (!m_data->proc_mag_para) {
-		pr_err("can't create proc_mag_para proc\n");
-		rc = -EFAULT;
-		goto exit;
-	}
-
-	pentry = proc_create("soft_para", 0666, m_data->proc_mag_para,
-			&mag_para_fops);
-
-	if (!pentry) {
-		pr_err("create soft_para proc failed.\n");
-		rc = -EFAULT;
-		goto exit;
-	}
-
-
-exit:
-	if (rc < 0) {
-		kfree(m_data);
-		m_data = NULL;
-	}
-
-	return rc;
-}
-
-static void oplus_mag_para_clean(void)
-{
-	if (gdata) {
-		kfree(gdata);
-		gdata = NULL;
-	}
+	gpio_direction_output(ldo, 1);
+	pinctrl_select_state(gpio_pinctrl, gpio_active);
+	return 0;
 }
 
 static int oplus_devinfo_probe(struct platform_device *pdev)
@@ -1355,13 +1490,24 @@ static int oplus_devinfo_probe(struct platform_device *pdev)
 
 	pr_info("%s call\n", __func__);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+		smem_size = ALIGN4(struct sensor_info);
+		rc = qcom_smem_alloc(QCOM_SMEM_HOST_ANY, SMEM_SENSOR, smem_size);
+		if (rc < 0 && rc != -EEXIST) {
+				pr_err("%s smem_alloc fail\n", __func__);
+				rc = -EFAULT;
+				return rc;
+		}
+
+		smem_size = 0;
+#endif
 	smem_addr = qcom_smem_get(QCOM_SMEM_HOST_ANY,
 			SMEM_SENSOR,
 			&smem_size);
 
 	if (IS_ERR(smem_addr)) {
 		pr_err("unable to acquire smem SMEM_SENSOR entry, smem_addr %p\n", smem_addr);
-		return (int)smem_addr; /* return -EPROBE_DEFER if smem not ready */
+		return -EPROBE_DEFER; /*return -EPROBE_DEFER if smem not ready*/
 	}
 
 	chip = (struct sensor_info *)(smem_addr);
@@ -1398,15 +1544,15 @@ static int oplus_devinfo_probe(struct platform_device *pdev)
 		return rc;
 	}
 	oplus_press_cali_data_init();
-	pad_als_data_init();
-	oplus_mag_para_init();
 	rc = oplus_als_cali_data_init();
 
 	if (rc < 0) {
 		kfree(gdata);
 		gdata = NULL;
 	}
-
+	if (g_ldo_enable) {
+		sensor_ldo_init(&pdev->dev);
+	}
 	return 0;
 }
 
@@ -1418,8 +1564,6 @@ static int oplus_devinfo_remove(struct platform_device *pdev)
 	}
 
 	oplus_press_cali_data_clean();
-	pad_als_data_clean();
-	oplus_mag_para_clean();
 
 	return 0;
 }

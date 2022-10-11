@@ -133,6 +133,7 @@ struct dsi_backlight_config {
 	u32 bl_normal_max_level;
 	u32 brightness_normal_max_level;
 	u32 brightness_default_level;
+	u32 bl_hbm_min_level;
 #endif /* OPLUS_BUG_STABILITY */
 
 	u32 bl_level;
@@ -178,6 +179,7 @@ struct dsi_panel_reset_config {
 #ifdef OPLUS_BUG_STABILITY
 	int panel_vout_gpio;
 	int panel_vddr_aod_en_gpio;
+	int panel_tp_reset_gpio;
 #endif
 };
 

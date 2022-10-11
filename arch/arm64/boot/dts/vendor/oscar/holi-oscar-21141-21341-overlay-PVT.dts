@@ -11,7 +11,7 @@
 	qcom,msm-id = <507 0x10000>;
 	qcom,board-id = <0x1000B 0>;
 	oplus,dtsi_no = <21141>;
-	oplus,pcb_range = <40 54 >;
+	oplus,pcb_range = <40 48 >;
 };
 
 #include "camera/holi-camera-sensor-qrd.dtsi"

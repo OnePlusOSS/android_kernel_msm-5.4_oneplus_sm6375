@@ -134,7 +134,10 @@ static void adsp_load_fw(struct work_struct *adsp_ldr_work)
 		dev_err(&pdev->dev,"%s: vdd_1v8 is not NULL\n", __func__);
 		regulator_set_voltage(vdd_1v8, 1704000, 1952000);
 		regulator_set_load(vdd_1v8, 200000);
-		regulator_enable(vdd_1v8);
+        rc = regulator_enable(vdd_1v8);
+        if (rc) {
+        	dev_err(&pdev->dev,"%s: regulator_enable fail.\n", __func__);
+        }
 	}
 	else
 		dev_err(&pdev->dev,"%s: vdd_1v8 is NULL\n", __func__);

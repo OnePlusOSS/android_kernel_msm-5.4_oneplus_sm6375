@@ -276,7 +276,16 @@ static int tcpci_alert_recv_msg(struct tcpc_device *tcpc)
 	int retval;
 	struct pd_msg *pd_msg;
 	enum tcpm_transmit_type type;
+	uint32_t chip_id;
+	bool is_sc2150a = false;
+	int rc;
 
+	rc = tcpci_get_chip_id(tcpc, &chip_id);
+	if (!rc &&  chip_id == SC2150A_DID)
+		is_sc2150a = true;
+
+	if (is_sc2150a)
+		tcpci_set_rx_enable(tcpc, PD_RX_CAP_PE_STARTUP);
 	pd_msg = pd_alloc_msg(tcpc);
 	if (pd_msg == NULL) {
 		tcpci_alert_status_clear(tcpc, TCPC_REG_ALERT_RX_MASK);
@@ -290,7 +299,8 @@ static int tcpci_alert_recv_msg(struct tcpc_device *tcpc)
 		pd_free_msg(tcpc, pd_msg);
 		return retval;
 	}
-
+	if (is_sc2150a)
+		tcpci_set_rx_enable(tcpc, tcpc->pd_port.rx_cap);
 	pd_msg->frame_type = (uint8_t) type;
 	pd_put_pd_msg_event(tcpc, pd_msg);
 	return 0;
@@ -427,6 +437,7 @@ int tcpci_alert(struct tcpc_device *tcpc)
 	int rv, i;
 	uint32_t alert_status;
 	uint32_t alert_mask;
+	uint32_t chip_id;
 
 	rv = tcpci_get_alert_status(tcpc, &alert_status);
 	if (rv)
@@ -447,7 +458,9 @@ int tcpci_alert(struct tcpc_device *tcpc)
 			  alert_status, alert_mask);
 #endif /* CONFIG_USB_PD_DBG_ALERT_STATUS */
 
-	alert_status &= alert_mask;
+	rv = tcpci_get_chip_id(tcpc, &chip_id);
+	if (rv || SC2150A_DID != chip_id)
+		alert_status &= alert_mask;
 
 	tcpci_alert_status_clear(tcpc,
 		alert_status & (~TCPC_REG_ALERT_RX_MASK));

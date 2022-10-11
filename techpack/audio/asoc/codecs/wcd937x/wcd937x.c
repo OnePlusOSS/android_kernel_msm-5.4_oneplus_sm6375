@@ -27,6 +27,19 @@
 #include "internal.h"
 #include "asoc/bolero-slave-internal.h"
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* Add for audio kernel feedback */
+#include "feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err
+#undef dev_err
+#define dev_err dev_err_fb
+#endif
+#ifdef pr_err
+#undef pr_err
+#define pr_err pr_err_fb
+#endif
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
 #define WCD937X_VARIANT_ENTRY_SIZE 32
 
 #define NUM_SWRS_DT_PARAMS 5
@@ -1063,6 +1076,24 @@ static int wcd937x_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 			snd_soc_component_update_bits(component,
 					WCD937X_DIGITAL_PDM_WD_CTL0,
 					0x17, 0x00);
+		#ifdef OPLUS_ARCH_EXTENDS
+		usleep_range(10000, 10010);
+		/* disable EAR CnP FSM */
+		snd_soc_component_update_bits(component,
+					WCD937X_EAR_EAR_EN_REG,
+					0x02, 0x00);
+		/* toggle EAR PA to let PA control registers take effect */
+		snd_soc_component_update_bits(component,
+					WCD937X_ANA_EAR,
+					0x80, 0x80);
+		snd_soc_component_update_bits(component,
+					WCD937X_ANA_EAR,
+					0x80, 0x00);
+		/* enable EAR CnP FSM */
+		snd_soc_component_update_bits(component,
+					WCD937X_EAR_EAR_EN_REG,
+					0x02, 0x02);
+		#endif /* OPLUS_ARCH_EXTENDS */
 		break;
 	};
 	return ret;
@@ -1638,9 +1669,16 @@ static int wcd937x_get_logical_addr(struct swr_device *swr_dev)
 	do {
 		ret = swr_get_logical_dev_num(swr_dev, swr_dev->addr, &devnum);
 		if (ret) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* Add for audio kernel feedback */
+			dev_info(&swr_dev->dev,
+				"%s get devnum %d for dev addr %lx failed\n",
+				__func__, devnum, swr_dev->addr);
+#else
 			dev_err(&swr_dev->dev,
 				"%s get devnum %d for dev addr %lx failed\n",
 				__func__, devnum, swr_dev->addr);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 			/* retry after 1ms */
 			usleep_range(1000, 1010);
 		}
@@ -1926,12 +1964,12 @@ static int wcd_reg_dump_set(struct snd_kcontrol *kcontrol,
 	if (!wcd937x || !(wcd937x->regmap)) {
 		return -1;
 	}
-	dev_err(component->dev, "wcd_reg_dump");
+	dev_info(component->dev, "wcd_reg_dump");
 	for (i = WCD937X_BASE_ADDRESS + 1; i <= wcd937x_regmap_config.max_register; i++) {
 		regmap_read(wcd937x->regmap, i, &reg);
-		dev_err(component->dev, "%04x:%04x\n", i, reg);
+		dev_info(component->dev, "%04x:%04x\n", i, reg);
 	}
-	dev_err(component->dev, "wcd_reg_dump end");
+	dev_info(component->dev, "wcd_reg_dump end");
 	return 0;
 }
 #endif
@@ -2251,6 +2289,208 @@ static const struct snd_kcontrol_new wcd937x_snd_controls[] = {
 	#endif
 };
 
+#ifdef OPLUS_ARCH_EXTENDS
+/* add for wcd mic die test */
+const char * const die_crk_det_en_text[] = {"0x80", "0xC0"};
+const u8 det_en[] = {0x80, 0xC0};
+
+const char * const die_crk_det_int1_text[] = {"0xC2", "0x82", "0x42", "0x02"};
+const u8 det_int1[] = {0xC2, 0x82, 0x42, 0x02};
+
+const char * const die_crk_det_out_text[] = {"0x00"};
+
+static SOC_ENUM_SINGLE_EXT_DECL(die_crk_det_en_enum, die_crk_det_en_text);
+static SOC_ENUM_SINGLE_EXT_DECL(die_crk_det_int1_enum, die_crk_det_int1_text);
+static SOC_ENUM_SINGLE_EXT_DECL(die_crk_det_out_enum, die_crk_det_out_text);
+
+static int get_enum_index_from_reg(const u8 reg_array[], u8 array_num, u8 reg)
+{
+	u8 index = 0;
+
+	for (index = 0; index < array_num; index++) {
+		if (reg_array[index] == reg) {
+			return index;
+		}
+	}
+
+	return index;
+}
+
+static int wcd93xx_die_crk_det_en_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	u8 ctl_value = 0;
+	int ret = -1;
+	struct snd_soc_component *component = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	if (!component)
+		return -EINVAL;
+
+	if (ucontrol->value.enumerated.item[0] < ARRAY_SIZE(det_en)) {
+		ctl_value = det_en[ucontrol->value.enumerated.item[0]];
+		ret = snd_soc_component_update_bits(component,
+			WCD937X_DIE_CRACK_DIE_CRK_DET_EN, 0xFF, ctl_value);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* Zhao.Pan@MULTIMEDIA.AUDIODRIVER.PLATFORM, 2022/01/25, Add for audio kernel feedback */
+		dev_info(component->dev, "%s: det en update value %4x, return %d \n", __func__,ctl_value, ret);
+#else
+		dev_err(component->dev, "%s: det en update value %4x, return %d \n", __func__,ctl_value, ret);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+	} else {
+		dev_err(component->dev,
+			"%s: out of index ,please check your input value \n", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int wcd93xx_die_crk_det_en_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	u32 reg = 0;
+	struct snd_soc_component *component = NULL;
+	struct wcd937x_priv *wcd937x = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+
+	if (!component) {
+		return -EINVAL;
+	}
+	wcd937x = snd_soc_component_get_drvdata(component);
+
+	if (!wcd937x || !(wcd937x->regmap)) {
+		return -EINVAL;
+	}
+
+	regmap_read(wcd937x->regmap, WCD937X_DIE_CRACK_DIE_CRK_DET_EN, &reg);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* Zhao.Pan@MULTIMEDIA.AUDIODRIVER.PLATFORM, 2022/01/25, Add for audio kernel feedback */
+	dev_info(component->dev, "%04x:%04x\n", WCD937X_DIE_CRACK_DIE_CRK_DET_EN, reg);
+#else
+	dev_err(component->dev, "%04x:%04x\n", WCD937X_DIE_CRACK_DIE_CRK_DET_EN, reg);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
+	ucontrol->value.enumerated.item[0] = get_enum_index_from_reg(det_en, ARRAY_SIZE(det_en), reg);
+
+	return 0;
+}
+
+static int wcd93xx_die_crk_det_int1_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	u8 ctl_value = 0;
+	int ret = -1;
+	struct snd_soc_component *component = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+	if (!component)
+		return -EINVAL;
+
+	if (ucontrol->value.enumerated.item[0] < ARRAY_SIZE(det_int1)) {
+		ctl_value = det_int1[ucontrol->value.enumerated.item[0]];
+		ret = snd_soc_component_update_bits(component,
+			WCD937X_DIE_CRACK_INT_DIE_CRK_DET_INT1, 0xFF, ctl_value);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+	/* Zhao.Pan@MULTIMEDIA.AUDIODRIVER.PLATFORM, 2022/01/25, Add for audio kernel feedback */
+		dev_info(component->dev, "%s: det int1 update value %4x, return %d \n", __func__,ctl_value, ret);
+#else
+		dev_err(component->dev, "%s: det int1 update value %4x, return %d \n", __func__,ctl_value, ret);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+	} else {
+		dev_err(component->dev,
+			"%s: out of index ,please check your input value \n", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int wcd93xx_die_crk_det_int1_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	u32 reg = 0;
+	struct snd_soc_component *component = NULL;
+	struct wcd937x_priv *wcd937x = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+
+	if (!component) {
+		return -EINVAL;
+	}
+	wcd937x = snd_soc_component_get_drvdata(component);
+
+	if (!wcd937x || !(wcd937x->regmap)) {
+		return -EINVAL;
+	}
+
+	regmap_read(wcd937x->regmap, WCD937X_DIE_CRACK_INT_DIE_CRK_DET_INT1, &reg);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* Zhao.Pan@MULTIMEDIA.AUDIODRIVER.PLATFORM, 2022/01/25, Add for audio kernel feedback */
+	dev_info(component->dev, "%04x:%04x\n", WCD937X_DIE_CRACK_INT_DIE_CRK_DET_INT1, reg);
+#else
+	dev_err(component->dev, "%04x:%04x\n", WCD937X_DIE_CRACK_INT_DIE_CRK_DET_INT1, reg);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
+	ucontrol->value.enumerated.item[0] = get_enum_index_from_reg(det_int1, ARRAY_SIZE(det_int1), reg);
+
+	return 0;
+}
+
+static int wcd93xx_die_crk_det_out_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol )
+{
+	u32 reg = 0;
+	struct snd_soc_component *component = NULL;
+	struct wcd937x_priv *wcd937x = NULL;
+
+	if (!kcontrol) {
+		return -EINVAL;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+
+	if (!component) {
+		return -EINVAL;
+	}
+	wcd937x = snd_soc_component_get_drvdata(component);
+
+	if (!wcd937x || !(wcd937x->regmap)) {
+		return -EINVAL;
+	}
+
+	regmap_read(wcd937x->regmap, WCD937X_DIE_CRACK_DIE_CRK_DET_OUT, &reg);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* Zhao.Pan@MULTIMEDIA.AUDIODRIVER.PLATFORM, 2022/01/25, Add for audio kernel feedback */
+	dev_info(component->dev, "%04x:%04x\n", WCD937X_DIE_CRACK_DIE_CRK_DET_OUT, reg);
+#else
+	dev_err(component->dev, "%04x:%04x\n", WCD937X_DIE_CRACK_DIE_CRK_DET_OUT, reg);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
+	ucontrol->value.enumerated.item[0] = reg;
+
+	return 0;
+}
+
+static const struct snd_kcontrol_new tx_die_crk_det_control[] = {
+	SOC_ENUM_EXT("DIE_CRK_DET_EN", die_crk_det_en_enum, wcd93xx_die_crk_det_en_get, wcd93xx_die_crk_det_en_put),
+	SOC_ENUM_EXT("DIE_CRK_DET_INT1", die_crk_det_int1_enum, wcd93xx_die_crk_det_int1_get, wcd93xx_die_crk_det_int1_put),
+	SOC_ENUM_EXT("DIE_CRK_DET_OUT", die_crk_det_out_enum, wcd93xx_die_crk_det_out_get, NULL),
+};
+#endif
 static const struct snd_kcontrol_new adc1_switch[] = {
 	SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0)
 };
@@ -2935,6 +3175,18 @@ static int wcd937x_soc_codec_probe(struct snd_soc_component *component)
 		snd_soc_dapm_ignore_suspend(dapm, "ADC3_OUTPUT");
 		snd_soc_dapm_sync(dapm);
 	}
+#ifdef OPLUS_ARCH_EXTENDS
+/* add for wcd mic die test */
+	do {
+		ret = snd_soc_add_component_controls(component, tx_die_crk_det_control,
+			ARRAY_SIZE(tx_die_crk_det_control));
+		if (ret < 0) {
+			dev_err(component->dev,
+				"%s: Failed to add snd ctrls for tx die crk det control\n", __func__);
+			goto err_hwdep; // just for test maybe no need go to err
+		}
+	} while(0);
+#endif
 	wcd937x->version = WCD937X_VERSION_1_0;
        /* Register event notifier */
 	wcd937x->nblock.notifier_call = wcd937x_event_notify;

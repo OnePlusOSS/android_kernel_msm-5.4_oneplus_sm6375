@@ -67,6 +67,7 @@ struct omrg_freq_device {
 	struct freq_qos_request min_qos_req;
 	struct freq_qos_request max_qos_req;
 	struct rcu_head rcu;
+	struct notifier_block nb_max;
 };
 
 struct omrg_rule;
@@ -80,6 +81,7 @@ struct omrg_device {
 	struct omrg_rule *ruler;
 	/* range divider freq, described as KHz */
 	unsigned int *divider;
+	bool *divider_dispense;
 	/* list node for omrg freq device's master list or slave list */
 	struct list_head node;
 	/* minimum freq, set by omrg rule */
@@ -97,6 +99,7 @@ struct omrg_rule {
 	struct kthread_work exec_work;
 	struct kthread_work *coop_work;
 	bool work_in_progress;
+	bool state_alter_pending;
 	struct irq_work irq_work;
 	/* spinlock to protect work_in_progress */
 	spinlock_t wip_lock;
@@ -284,15 +287,17 @@ static unsigned long omrg_check_thermal_limit(struct omrg_device *master,
 
 static int omrg_rule_get_master_state(const struct omrg_rule *ruler)
 {
-	int i, tmp;
+	int i, tmp, stt;
 	int state = INVALID_STATE;
 
 	if (!ruler->enable)
 		return state;
 
 	for (i = 0; i < ruler->master_num; i++) {
+		stt = ruler->master_dev[i].state;
 		tmp = ruler->master_dev[i].idle ?
-		      0 : ruler->master_dev[i].state;
+		      0 : ruler->master_dev[i].divider_dispense[stt] ?
+			ruler->divider_num : stt;
 		if (tmp < 0)
 			continue;
 
@@ -450,10 +455,12 @@ static void omrg_update_state(struct omrg_rule *ruler, bool force)
 
 	spin_lock_irqsave(&ruler->wip_lock, flags);
 	if (ruler->work_in_progress) {
+		ruler->state_alter_pending = true;
 		spin_unlock_irqrestore(&ruler->wip_lock, flags);
 		return;
 	}
 	ruler->work_in_progress = true;
+	ruler->state_alter_pending = false;
 	/*
 	 * omrg_rule_update_work will update other cpufreq/devfreq's freq,
 	 * throw it to a global worker can avoid function reentrant and
@@ -481,6 +488,7 @@ static void omrg_coop_work_update(struct omrg_freq_device *freq_dev,
 	struct omrg_device *master = NULL;
 	int old_state;
 	int update = 0;
+	struct omrg_rule *ruler = work_dev->ruler;
 
 	/* find all related coop work and check if they need an update */
 	list_for_each_entry(master, &freq_dev->master_list, node) {
@@ -494,10 +502,14 @@ static void omrg_coop_work_update(struct omrg_freq_device *freq_dev,
 	}
 
 	old_state = work_dev->state;
-	work_dev->state = omrg_freq2state(work_dev->ruler, work_dev->divider, freq);
+	work_dev->state = omrg_freq2state(ruler, work_dev->divider, freq);
+
+	if (ruler->state_idx != omrg_rule_get_master_state(ruler) ||
+			ruler->state_alter_pending)
+		update = 1;
 
 	if (work_dev->state != old_state || update)
-		omrg_update_state(work_dev->ruler, true);
+		omrg_update_state(ruler, true);
 }
 
 static unsigned long omrg_freq_check_limit(struct omrg_freq_device *freq_dev,
@@ -741,6 +753,37 @@ static void of_match_omrg_freq_device(struct omrg_rule *ruler)
 	rcu_read_unlock();
 }
 
+static int omrg_notifier_max(struct notifier_block *nb, unsigned long freq,
+				void *data)
+{
+	struct omrg_freq_device *freq_dev = NULL;
+	struct omrg_device *master = NULL;
+	int i, ret = NOTIFY_DONE;
+
+	rcu_read_lock();
+	freq_dev = container_of(nb, struct omrg_freq_device, nb_max);
+	if (!freq_dev || !freq_dev->policy)
+		goto unlock;
+
+	if (list_empty(&freq_dev->master_list))
+		goto unlock;
+
+	list_for_each_entry(master, &freq_dev->master_list, node) {
+		for (i = 0; i < master->ruler->divider_num; i++) {
+			if (freq <= master->divider[i])
+				master->divider_dispense[i] = true;
+			else
+				master->divider_dispense[i] = false;
+		}
+	}
+	ret = NOTIFY_OK;
+
+unlock:
+	rcu_read_unlock();
+
+	return ret;
+}
+
 /*
  * omrg_cpufreq_register()
  * @policy: the cpufreq policy of the freq domain
@@ -758,6 +801,7 @@ void omrg_cpufreq_register(struct cpufreq_policy *policy)
 	struct device *cpu_dev = NULL;
 	int ret;
 	unsigned int cpu = smp_processor_id();
+	unsigned long flags;
 
 	if (IS_ERR_OR_NULL(policy)) {
 		pr_err("%s:null cpu policy\n", __func__);
@@ -770,7 +814,7 @@ void omrg_cpufreq_register(struct cpufreq_policy *policy)
 		return;
 	}
 
-	spin_lock(&omrg_list_lock);
+	spin_lock_irqsave(&omrg_list_lock, flags);
 
 	list_for_each_entry_rcu(freq_dev, &g_omrg_cpufreq_list, node) {
 		if (cpumask_subset(policy->related_cpus, &freq_dev->cpus) ||
@@ -817,6 +861,15 @@ void omrg_cpufreq_register(struct cpufreq_policy *policy)
 		goto remove_min_qos;
 	}
 
+	freq_dev->nb_max.notifier_call = omrg_notifier_max;
+	ret = freq_qos_add_notifier(&policy->constraints,
+					FREQ_QOS_MAX, &freq_dev->nb_max);
+	if (ret) {
+		pr_err("%s: Failed to add qos max notifier (%d)\n", __func__,
+				ret);
+		goto remove_max_qos;
+	}
+
 	freq_dev->policy = cpufreq_cpu_get(policy->cpu);
 
 	list_add_tail_rcu(&freq_dev->node, &g_omrg_cpufreq_list);
@@ -824,16 +877,18 @@ void omrg_cpufreq_register(struct cpufreq_policy *policy)
 	if (g_omrg_initialized)
 		of_match_omrg_rule(freq_dev);
 
-	spin_unlock(&omrg_list_lock);
+	spin_unlock_irqrestore(&omrg_list_lock, flags);
 	omrg_refresh_all_rule();
 	return;
 
+remove_max_qos:
+	freq_qos_remove_request(&freq_dev->max_qos_req);
 remove_min_qos:
 	freq_qos_remove_request(&freq_dev->min_qos_req);
 free_freq_dev:
 	kfree(freq_dev);
 unlock:
-	spin_unlock(&omrg_list_lock);
+	spin_unlock_irqrestore(&omrg_list_lock, flags);
 	omrg_refresh_all_rule();
 }
 EXPORT_SYMBOL_GPL(omrg_cpufreq_register);
@@ -863,9 +918,12 @@ static void omrg_kfree_freq_dev(struct rcu_head *rcu)
 
 	omrg_freq_dev_detach(freq_dev);
 	if (freq_dev->policy) {
+		freq_qos_remove_notifier(&freq_dev->policy->constraints,
+					FREQ_QOS_MAX, &freq_dev->nb_max);
 		freq_qos_remove_request(&freq_dev->max_qos_req);
 		freq_qos_remove_request(&freq_dev->min_qos_req);
 		cpufreq_cpu_put(freq_dev->policy);
+		freq_dev->policy = NULL;
 	}
 	kfree(freq_dev);
 }
@@ -890,13 +948,14 @@ void omrg_cpufreq_unregister(struct cpufreq_policy *policy)
 	struct omrg_freq_device *freq_dev = NULL;
 	bool found = false;
 	int cpu = smp_processor_id();
+	unsigned long flags;
 
 	if (IS_ERR_OR_NULL(policy)) {
 		pr_err("%s:null cpu policy\n", __func__);
 		return;
 	}
 
-	spin_lock(&omrg_list_lock);
+	spin_lock_irqsave(&omrg_list_lock, flags);
 	list_for_each_entry_rcu(freq_dev, &g_omrg_cpufreq_list, node) {
 		if (cpumask_test_cpu(cpu, &freq_dev->cpus)) {
 			cpumask_test_and_clear_cpu(cpu, &freq_dev->cpus_online);
@@ -907,7 +966,7 @@ void omrg_cpufreq_unregister(struct cpufreq_policy *policy)
 			break;
 		}
 	}
-	spin_unlock(&omrg_list_lock);
+	spin_unlock_irqrestore(&omrg_list_lock, flags);
 
 	if (found)
 		call_rcu(&freq_dev->rcu, omrg_kfree_freq_dev);
@@ -1208,6 +1267,15 @@ static int omrg_device_init(struct device *dev, struct omrg_device **omrg_dev,
 			return -ENOENT;
 		}
 
+		t_omrg_dev->divider_dispense = (bool *)
+					devm_kzalloc(dev,
+						     sizeof(bool) * divider_num,
+							GFP_KERNEL);
+		if (IS_ERR_OR_NULL(t_omrg_dev->divider_dispense)) {
+			dev_err(dev, "alloc divider_dispense fail\n");
+			return -ENOMEM;
+		}
+
 		t_omrg_dev->np = omrg_dev_spec.np;
 		t_omrg_dev->ruler = ruler;
 		t_omrg_dev->state = INVALID_STATE;
@@ -1329,6 +1397,7 @@ static int omrg_probe(struct platform_device *pdev)
 
 		omrg_init_ruler_work(ruler);
 		ruler->work_in_progress = false;
+		ruler->state_alter_pending = false;
 		spin_lock_init(&ruler->wip_lock);
 		init_irq_work(&ruler->irq_work, omrg_irq_work);
 

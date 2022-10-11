@@ -45,6 +45,7 @@ extern int lcd_closebl_flag;
 extern int lcd_closebl_flag_fp;
 /* Add for ffl feature */
 extern bool oplus_ffl_trigger_finish;
+int vid_cmd_mode_change = 0;
 #endif
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 #define INT_BASE_10 10
@@ -1024,6 +1025,12 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 			(panel->panel_mode == DSI_OP_VIDEO_MODE))
 		te_rechecks = 0;
 
+#ifdef OPLUS_BUG_STABILITY
+	if (!strcmp(panel->oplus_priv.vendor_name,"AMS644VA04") ||
+		strstr(panel->oplus_priv.vendor_name,"NT36523")) {
+		te_rechecks = MAX_TE_RECHECKS;
+	}
+#endif /*OPLUS_BUG_STABILITY*/
 	ret = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
 		DSI_ALL_CLKS, DSI_CLK_ON);
 	if (ret)
@@ -4819,6 +4826,10 @@ static int _dsi_display_dyn_update_clks(struct dsi_display *display,
 	/* wait for dynamic refresh done */
 	display_for_each_ctrl(i, display) {
 		ctrl = &display->ctrl[i];
+		#ifdef OPLUS_BUG_STABILITY
+		/*sandeep.vulluri@oneplus.MM.Display.LCD.Stable,2022-02-18 add for avoid C/V switch error. */
+		if (!vid_cmd_mode_change) {
+		#endif /* OPLUS_BUG_STABILITY */
 		rc = dsi_ctrl_wait4dynamic_refresh_done(ctrl->ctrl);
 		if (rc) {
 			DSI_ERR("wait4dynamic refresh failed for dsi:%d\n", i);
@@ -4827,6 +4838,11 @@ static int _dsi_display_dyn_update_clks(struct dsi_display *display,
 			DSI_INFO("dynamic refresh done on dsi: %s\n",
 				i ? "slave" : "master");
 		}
+#ifdef OPLUS_BUG_STABILITY
+		/*sandeep.vulluri@oneplus.MM.Display.LCD.Stable,2022-02-18 add for avoid C/V switch error. */
+		}
+		vid_cmd_mode_change = 0;
+#endif /* OPLUS_BUG_STABILITY */
 	}
 
 	display_for_each_ctrl(i, display) {
@@ -4900,11 +4916,22 @@ static int dsi_display_dynamic_clk_switch_vid(struct dsi_display *display,
 		BIT(DSI_FIFO_OVERFLOW);
 	dsi_display_mask_ctrl_error_interrupts(display, mask, true);
 
+#ifdef OPLUS_BUG_STABILITY
 	/* update the phy timings based on new mode */
+	if (!strcmp(display->panel->oplus_priv.vendor_name,"AMS644VA04")) {
+		DSI_INFO("samsung ramless oled enable lp11 phy timing is fixed!\n");
+	} else {
+		display_for_each_ctrl(i, display) {
+			ctrl = &display->ctrl[i];
+			dsi_phy_update_phy_timings(ctrl->phy, &display->config);
+		}
+	}
+#else
 	display_for_each_ctrl(i, display) {
 		ctrl = &display->ctrl[i];
 		dsi_phy_update_phy_timings(ctrl->phy, &display->config);
 	}
+#endif /*OPLUS_BUG_STABILITY*/
 
 	/* back up existing rates to handle failure case */
 	bkp_freq.byte_clk_rate = m_ctrl->ctrl->clk_freq.byte_clk_rate;
@@ -6341,6 +6368,11 @@ int dsi_display_drm_bridge_init(struct dsi_display *display,
 
 	display->bridge = bridge;
 	priv->bridges[priv->num_bridges++] = &bridge->base;
+	if (display->tx_cmd_buf == NULL) {
+		rc = dsi_host_alloc_cmd_tx_buffer(display);
+		if (rc)
+			DSI_ERR("failed to allocate cmd tx buffer memory\n");
+	}
 
 error:
 	mutex_unlock(&display->display_lock);
@@ -8553,6 +8585,9 @@ int dsi_display_post_enable(struct dsi_display *display)
 	mutex_lock(&display->display_lock);
 
 	if (display->panel->cur_mode->dsi_mode_flags & DSI_MODE_FLAG_POMS) {
+#ifdef OPLUS_BUG_STABILITY
+		vid_cmd_mode_change = 0;
+#endif /* OPLUS _BUG_STABILITY */
 		if (display->config.panel_mode == DSI_OP_CMD_MODE)
 			dsi_panel_mode_switch_to_cmd(display->panel);
 
@@ -8584,6 +8619,8 @@ int dsi_display_pre_disable(struct dsi_display *display)
 	}
 
 	mutex_lock(&display->display_lock);
+#ifdef OPLUS_BUG_STABILITY
+#endif /* OPLUS_BUG_STABILITY */
 
 	/* enable the clk vote for CMD mode panels */
 	if (display->config.panel_mode == DSI_OP_CMD_MODE)

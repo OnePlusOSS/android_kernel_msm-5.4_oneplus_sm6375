@@ -155,7 +155,10 @@ int soc_sia81xx_init(
 		aux_dev[i].init = NULL;
 
 		codec_conf[i].dev_name = NULL;
-		codec_conf[i].name_prefix = NULL; //dev_name_prefix;
+		if (dev_num > 1)
+			codec_conf[i].name_prefix = dev_name_prefix;
+		else
+			codec_conf[i].name_prefix = NULL; //dev_name_prefix;
 		codec_conf[i].of_node = dev_of_node;
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(5,3,18))

@@ -224,70 +224,23 @@ out:
 }
 EXPORT_SYMBOL_GPL(wl2868c_set_ldo_value);
 
-static struct wl2868c_ldomap ldolist[] = {
-    {CAMERA_INDEX_MAIN, SENSOR_EXTLDO_VANA, EXT_LDO3},     //BackMain AVDD
-    {CAMERA_INDEX_MAIN, SENSOR_EXTLDO_VANA1, EXT_LDO5},    //add for pikachu 2nd AVDD
-    {CAMERA_INDEX_MAIN, SENSOR_EXTLDO_VDIG, EXT_LDO1},     //BackMain DVDD
-    {CAMERA_INDEX_MAIN, SENSOR_EXTLDO_VIO,  EXT_LDO6},     //BackMain IOVDD
-    {CAMERA_INDEX_MAIN, SENSOR_EXTLDO_VAF,  EXT_LDO7},     //BackMain AFVDD
-
-    {CAMERA_INDEX_MONO, SENSOR_EXTLDO_VIO,  EXT_LDO6},     //BackMono IOVDD
-    {CAMERA_INDEX_MONO, SENSOR_EXTLDO_VANA, EXT_LDO4},     //BackMono AVDD
-
-    {CAMERA_INDEX_FRONT, SENSOR_EXTLDO_VANA, EXT_LDO4},    //FrontMain AVDD
-    {CAMERA_INDEX_FRONT, SENSOR_EXTLDO_VDIG, EXT_LDO2},    //FrontMain DVDD
-    {CAMERA_INDEX_FRONT, SENSOR_EXTLDO_VIO,  EXT_LDO6},    //FrontMain IOVDD
-
-    {CAMERA_INDEX_MACRO, SENSOR_EXTLDO_VIO,  EXT_LDO6},    //BackMacro IOVDD
-    {CAMERA_INDEX_MACRO, SENSOR_EXTLDO_VANA, EXT_LDO4},    //BackMacro VADD
-
-};
-
-int wl2868c_set_ldo_enable(uint32_t sensor_index, enum msm_camera_power_seq_type seq_type, uint32_t min_voltage, uint32_t max_voltage)
+int wl2868c_ldo_enable(EXT_SELECT ldonum,unsigned int value)
 {
     int ret = 0;
-    EXT_SELECT ldonum = EXT_NONE;
-    unsigned int ldo_vol_value = 0;
-    unsigned int i = 0;
-
-    if(sensor_index >= CAMERA_INDEX_MAX_NUM ||
-            seq_type >= SENSOR_SEQ_TYPE_MAX ||
-            min_voltage < 600000 ||
-            max_voltage < 600000 ||
-            min_voltage > max_voltage){
-        WL2868C_PRINT("[wl2868c] %s invalid parameters!!!\n",__FUNCTION__);
-        return -1;
-    }
 
     mutex_lock(&i2c_control_mutex);
-    for(i = 0;i < (sizeof(ldolist) / sizeof(ldolist[0]));i++) {
-        if(sensor_index == ldolist[i].sensor_index && seq_type == ldolist[i].seq_type) {
-            ldonum = ldolist[i].ldo_selected;
-            break;
-        }
-    }
-
-    if(ldonum == EXT_NONE) {
-        WL2868C_PRINT("[wl2868c] %s ldo setting not found in ldolist!!!\n",__FUNCTION__);
-        return -2;
-    }
-
-    ldo_vol_value = min_voltage / 1000;
-
-    WL2868C_PRINT("%s ldonum:%d set_mv:%d\n", __FUNCTION__, ldonum, ldo_vol_value);
+    WL2868C_PRINT("%s ldonum:%d set_mv:%d\n", __FUNCTION__, ldonum+1, value);
     if (ldonum >= EXT_LDO1 && ldonum < EXT_MAX) {
         ++which_ldo_chip[ldo_id].enable_count[ldonum];
         WL2868C_PRINT("[wl2868c] %s LDO %d ref count %u", __FUNCTION__, ldonum+1,
                     which_ldo_chip[ldo_id].enable_count[ldonum]);
     }
 
-    ret = wl2868c_set_ldo_value(ldonum, ldo_vol_value);
-    if (ret < 0) {
-        goto out;
-    }
-
-    ret = wl2868c_set_en_ldo(ldonum, 1);
-    if (ret < 0) {
+    ret = wl2868c_set_ldo_value(ldonum, value);
+    ret |= wl2868c_set_en_ldo(ldonum, 1);
+    if (ret)
+    {
+        WL2868C_PRINT("[wl2868c] wl2868c_ldo_enable fail!\n");
         goto out;
     }
     mutex_unlock(&i2c_control_mutex);
@@ -295,42 +248,22 @@ int wl2868c_set_ldo_enable(uint32_t sensor_index, enum msm_camera_power_seq_type
     return 0;
 
 out:
-    WL2868C_PRINT("wl2868c_set_ldo_enable error!\n");
+    WL2868C_PRINT("wl2868c_ldo_enable error!\n");
     if (ldonum >= EXT_LDO1 && ldonum < EXT_MAX) {
         --which_ldo_chip[ldo_id].enable_count[ldonum];
     }
     mutex_unlock(&i2c_control_mutex);
     return ret;
 }
-EXPORT_SYMBOL_GPL(wl2868c_set_ldo_enable);
+EXPORT_SYMBOL_GPL(wl2868c_ldo_enable);
 
-int wl2868c_set_ldo_disable(uint32_t sensor_index, enum msm_camera_power_seq_type seq_type)
+int wl2868c_ldo_disable(EXT_SELECT ldonum,unsigned int value)
 {
     int ret = 0;
-    EXT_SELECT ldonum = EXT_NONE;
-    unsigned int i = 0;
-
-    if(sensor_index >= CAMERA_INDEX_MAX_NUM ||
-                    seq_type >= SENSOR_SEQ_TYPE_MAX) {
-        WL2868C_PRINT("[wl2868c] %s invalid parameters!!!\n",__FUNCTION__);
-        return -1;
-    }
-
-    mutex_lock(&i2c_control_mutex);
-    for(i = 0;i < (sizeof(ldolist) / sizeof(ldolist[0]));i++) {
-        if(sensor_index == ldolist[i].sensor_index && seq_type == ldolist[i].seq_type) {
-            ldonum = ldolist[i].ldo_selected;
-            break;
-        }
-    }
-
-    if(ldonum == EXT_NONE) {
-        WL2868C_PRINT("[wl2868c] %s ldo setting not found in ldolist!!!\n",__FUNCTION__);
-        return -2;
-    }
-
-    WL2868C_PRINT("[wl2868c] %s LDO %d ref count %u", __FUNCTION__, ldonum+1,
-                    which_ldo_chip[ldo_id].enable_count[ldonum]);
+    if(ldonum!=-1){
+        mutex_lock(&i2c_control_mutex);
+        WL2868C_PRINT("[wl2868c] %s LDO %d ref count %u", __FUNCTION__, ldonum+1,
+                which_ldo_chip[ldo_id].enable_count[ldonum]);
 
     if ((ldonum >= EXT_LDO1 && ldonum < EXT_MAX) && (which_ldo_chip[ldo_id].enable_count[ldonum] > 0)) {
         --which_ldo_chip[ldo_id].enable_count[ldonum];
@@ -342,10 +275,11 @@ int wl2868c_set_ldo_disable(uint32_t sensor_index, enum msm_camera_power_seq_typ
         }
     }
 
-    mutex_unlock(&i2c_control_mutex);
-    return 0;
+        mutex_unlock(&i2c_control_mutex);
+    }
+    return ret;
 }
-EXPORT_SYMBOL_GPL(wl2868c_set_ldo_disable);
+EXPORT_SYMBOL_GPL(wl2868c_ldo_disable);
 
 /*****************************************************************************
  * Data Structure

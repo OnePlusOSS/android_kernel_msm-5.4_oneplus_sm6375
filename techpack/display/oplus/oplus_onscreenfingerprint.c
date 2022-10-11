@@ -45,8 +45,7 @@ extern int dynamic_osc_clock;
 extern int oplus_dimlayer_hbm_vblank_count;
 extern atomic_t oplus_dimlayer_hbm_vblank_ref;
 extern int oplus_onscreenfp_status;
-extern u32 oplus_onscreenfp_vblank_count;
-extern ktime_t oplus_onscreenfp_pressed_time;
+
 int oplus_dfps_idle_off = 0;
 
 extern int oplus_display_mode;
@@ -814,6 +813,7 @@ int oplus_display_panel_notify_fp_press(void *data)
 	int i;
 	bool if_con = false;
 	uint32_t *p_onscreenfp_status = data;
+	static ktime_t on_time;
 
 #ifdef OPLUS_FEATURE_AOD_RAMLESS
 	struct drm_display_mode *cmd_mode = NULL;
@@ -833,7 +833,37 @@ int oplus_display_panel_notify_fp_press(void *data)
 	if (onscreenfp_status == oplus_onscreenfp_status)
 		return 0;
 
-	pr_err("notify fingerpress %s\n", onscreenfp_status ? "on" : "off");
+	pr_info("hidl notify fingerpress %s\n", onscreenfp_status ? "on" : "off");
+
+	if ((oplus_get_panel_brightness() == 0) && onscreenfp_status) {
+		pr_info("notify fingerpress return as screen is off\n");
+		return 0;
+	}
+		if (OPLUS_DISPLAY_AOD_SCENE == get_oplus_display_scene() || oplus_display_mode == 0) {
+		if (onscreenfp_status) {
+			on_time = ktime_get();
+		} else {
+			ktime_t now = ktime_get();
+			ktime_t delta = ktime_sub(now, on_time);
+
+			if (ktime_to_ns(delta) < 300000000)
+				msleep(300 - (ktime_to_ns(delta) / 1000000));
+			pr_err("press up too fast, wait 300ms to avoid resend CV switch again");
+		}
+	}
+
+		if (OPLUS_DISPLAY_AOD_SCENE == get_oplus_display_scene() || oplus_display_mode == 0) {
+		if (onscreenfp_status) {
+			on_time = ktime_get();
+		} else {
+			ktime_t now = ktime_get();
+			ktime_t delta = ktime_sub(now, on_time);
+
+			if (ktime_to_ns(delta) < 300000000)
+				msleep(300 - (ktime_to_ns(delta) / 1000000));
+			pr_err("press up too fast, wait 300ms to avoid resend CV switch again");
+		}
+	}
 
 	vblank_get = drm_crtc_vblank_get(dsi_connector->state->crtc);
 	if (vblank_get) {
@@ -870,15 +900,6 @@ int oplus_display_panel_notify_fp_press(void *data)
 					DSI_ALL_CLKS, DSI_CLK_OFF);
 		}
 	}
-#ifdef OPLUS_FEATURE_AOD_RAMLESS
-	if (!display->panel->oplus_priv.is_aod_ramless) {
-#endif /* OPLUS_FEATURE_AOD_RAMLESS */
-		oplus_onscreenfp_vblank_count = drm_crtc_vblank_count(
-			dsi_connector->state->crtc);
-		oplus_onscreenfp_pressed_time = ktime_get();
-#ifdef OPLUS_FEATURE_AOD_RAMLESS
-	}
-#endif /* OPLUS_FEATURE_AOD_RAMLESS */
 
 	drm_modeset_lock_all(drm_dev);
 
@@ -932,8 +953,10 @@ int oplus_display_panel_notify_fp_press(void *data)
 	}
 #endif /* OPLUS_FEATURE_AOD_RAMLESS */
 
-	err = drm_atomic_commit(state);
-	drm_atomic_state_put(state);
+	if (onscreenfp_status) {
+		err = drm_atomic_commit(state);
+		drm_atomic_state_put(state);
+	}
 
 #ifdef OPLUS_FEATURE_AOD_RAMLESS
 	if (display->panel->oplus_priv.is_aod_ramless && mode_changed) {

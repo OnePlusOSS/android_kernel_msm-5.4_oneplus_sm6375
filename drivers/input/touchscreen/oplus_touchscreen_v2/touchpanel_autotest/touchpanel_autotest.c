@@ -259,7 +259,8 @@ EXPORT_SYMBOL(get_test_item_info);
  * Returning parameter number(success) or negative errno(failed)
  */
 int save_test_result(struct auto_testdata *p_auto_testdata,
-		     uint8_t  *data, enum limit_type limit_type, char  *limit_name)
+		     short *data, int data_size,
+		     enum limit_type limit_type, char *limit_name)
 {
 	uint8_t  data_buf[64] = {0};
 	int ret = 0;
@@ -282,6 +283,9 @@ int save_test_result(struct auto_testdata *p_auto_testdata,
 		      strlen(data_buf), p_auto_testdata->pos);
 
 	if (limit_type == LIMIT_TYPE_TX_RX_DATA) {
+		if (data_size < p_auto_testdata->rx_num * p_auto_testdata->tx_num) {
+			return -1;
+		}
 		for (i = 0; i < p_auto_testdata->rx_num * p_auto_testdata->tx_num; i++) {
 			snprintf(data_buf, 64, "%d,", data[i]);
 			tp_test_write(p_auto_testdata->fp, p_auto_testdata->length, data_buf,
@@ -299,6 +303,9 @@ int save_test_result(struct auto_testdata *p_auto_testdata,
 			      strlen(data_buf), p_auto_testdata->pos);
 
 	} else if (limit_type == LIMIT_TYPE_SLEF_TX_RX_DATA) {
+		if (data_size < p_auto_testdata->rx_num + p_auto_testdata->tx_num) {
+			return -1;
+		}
 		for (i = 0; i < p_auto_testdata->rx_num + p_auto_testdata->tx_num; i++) {
 			snprintf(data_buf, 64, "%d,", data[i]);
 			tp_test_write(p_auto_testdata->fp, p_auto_testdata->length, data_buf,

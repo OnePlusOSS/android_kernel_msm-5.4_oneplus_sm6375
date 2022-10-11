@@ -51,31 +51,33 @@ bool is_support_chip(chip_type chip)
 	}
 
 	switch(chip) {
-		case NQ330:
-			target_chipset = "NQ330";
-			break;
-		case SN100T:
-			target_chipset = "SN100T";
-			break;
-		case SN100F:
-			target_chipset = "SN100F";
-			break;
-		case ST21H:
-			target_chipset = "ST21H";
-			break;
-		case ST54H:
-			target_chipset = "ST54H";
-			break;
-		case PN557:
-			target_chipset = "PN557";
-			break;
-		default:
-			target_chipset = "UNKNOWN";
-			break;
+	case NQ330:
+		target_chipset = "NQ330";
+		break;
+	case SN100T:
+		target_chipset = "SN100T|SN110T";
+		break;
+	case SN100F:
+		target_chipset = "SN100F";
+		break;
+	case SN110T:
+		target_chipset = "SN100T|SN110T";
+		break;
+	case ST21H:
+		target_chipset = "ST21H";
+		break;
+	case ST54H:
+		target_chipset = "ST54H";
+		break;
+	case PN557:
+		target_chipset = "PN557";
+		break;
+	default:
+		target_chipset = "UNKNOWN";
+		break;
 	}
 
-	if (strcmp(target_chipset, current_chipset) == 0)
-	{
+	if (strstr(target_chipset, current_chipset) != NULL) {
 		ret = true;
 	}
 
@@ -149,7 +151,7 @@ static int oplus_nfc_probe(struct platform_device *pdev)
 	if (project > 0x10000) {
 		sprintf(prop_name, "chipset-%X-%d", project , operate);
 	} else {
-		sprintf(prop_name, "chipset-%d-%d", project , operate);
+		sprintf(prop_name, "chipset-%u-%d", project , operate);
 	}
 	pr_err("%s, prop to be read = %s", __func__, prop_name);
 
@@ -158,7 +160,7 @@ static int oplus_nfc_probe(struct platform_device *pdev)
 		if (project > 0x10000) {
 			sprintf(prop_name, "chipset-%X", project);
 		} else {
-			sprintf(prop_name, "chipset-%d", project);
+			sprintf(prop_name, "chipset-%u", project);
 		}
 		pr_err("%s, prop to be read = %s", __func__, prop_name);
 		if ((of_property_read_string(dev->of_node, prop_name, &chipset_node))) {
@@ -221,7 +223,6 @@ static struct platform_driver oplus_nfc_driver = {
 
 static int __init oplus_nfc_init(void)
 {
-	pr_err("enter %s", __func__);
 	return platform_driver_register(&oplus_nfc_driver);
 }
 

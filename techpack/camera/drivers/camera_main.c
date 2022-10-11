@@ -57,7 +57,6 @@
 #include "cam_tfe_csid530.h"
 #include "cam_csid_ppi100.h"
 #include "camera_main.h"
-#include "wl2868c.h"
 
 struct camera_submodule_component {
 	int (*init)(void);
@@ -112,9 +111,6 @@ static const struct camera_submodule_component camera_sensor[] = {
 #if IS_REACHABLE(CONFIG_LEDS_QPNP_FLASH_V2) || \
 	IS_REACHABLE(CONFIG_LEDS_QTI_FLASH)
 	{&cam_flash_init_module, &cam_flash_exit_module},
-#endif
-#if IS_REACHABLE(CONFIG_CAMERA_EXTLDO_WL2868C)
-	{&wl2868c_init_module, &wl2868c_exit_module},
 #endif
 #endif
 };

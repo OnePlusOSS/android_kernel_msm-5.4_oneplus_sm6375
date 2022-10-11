@@ -33,4 +33,8 @@ int oplus_display_panel_set_dim_alpha(void *buf);
 int oplus_display_panel_get_dim_dc_alpha(void *buf);
 int oplus_display_panel_get_dimlayer_enable(void *data);
 int oplus_display_panel_set_dimlayer_enable(void *data);
+void press_event_notify_init(void);
+void press_event_notify(int delay);
+void oplus_notify_fingerprint_press_event(bool press);
+void oplus_notify_hbm_off(void);
 #endif /*_OPLUS_DC_DIMING_H_*/

@@ -229,6 +229,7 @@ struct cam_flash_ctrl {
 	const char *                        flash_name;
 /*Add by Fangyan @ Camera 2020/08/17 for flash current*/
 	uint32_t                            flash_current;
+	bool                                pmic_pm8008;
 #endif
 	uint32_t                            streamoff_count;
 	int32_t                             apply_streamoff;

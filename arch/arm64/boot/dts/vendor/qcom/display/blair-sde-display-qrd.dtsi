@@ -74,16 +74,47 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_avdd>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <1>;
-	qcom,mdss-dsi-bl-max-level = <2047>;
-	qcom,mdss-brightness-max-level = <2047>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-dsi-bl-normal-max-level = <2047>;
+	qcom,mdss-brightness-normal-max-level = <2047>;
+	qcom,mdss-dsi-bl-hbm-min-level = <3727>;
 	qcom,mdss-brightness-default-level = <400>;
+	qcom,bl-update-flag = "delay_until_first_frame";
 	qcom,platform-te-gpio = <&tlmm 23 0>;
 	qcom,platform-reset-gpio = <&tlmm 47 0>;
-	oplus,mdss-dsi-vendor-name = "AMS643YE01";
-	oplus,mdss-dsi-manufacture = "samsung2047";
+	qcom,platform-panel-vout-gpio = <&tlmm 86 0>;
+	oplus,mdss-dsi-vendor-name = "S6E3FC3";
+	oplus,mdss-dsi-manufacture = "SAMSUNG2047";
 	oplus,osc-support;
+	oplus,mdss-dsi-osc-clk-mode0-rate = <167000>;
+	oplus,mdss-dsi-osc-clk-mode1-rate = <169000>;
+
+	oplus,dsi-fod-brightness = <0 0xff>,
+				<4 0xec>,
+				<50 0xeb>,
+				<60 0xea>,
+				<90 0xe8>,
+				<140 0xe6>,
+				<200 0xe3>,
+				<300 0xdb>,
+				<450 0xcd>,
+				<600 0xbf>,
+				<750 0xaf>,
+				<900 0xa0>,
+				<1050 0x90>,
+				<1200 0x80>,
+				<1400 0x6c>,
+				<1600 0x57>,
+				<1800 0x44>,
+				<2047 0x2a>;
 
 	qcom,ulps-enabled;
+	oplus,bl_interpolate_nosub;
+	oplus,is_samsung_panel;
+	oplus,mdss-panel-serial-number-index = <4>;
+	oplus,mdss-panel-serial-number-reg = <0xA1>;
+
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
 				"shadow_byte_clk0", "shadow_pixel_clk0";
@@ -91,14 +122,29 @@
 	qcom,mdss-dsi-t-clk-pre = <0x1F>;
 	qcom,mdss-dsi-display-timings {
 		timing@0{
-			qcom,mdss-dsi-panel-phy-timings = [00 1C 08 07 23 22 07
-				07 08 02 04 00 1a 17];
+			qcom,mdss-dsi-panel-phy-timings = [00 16 05 05 14 1F 06
+				05 06 02 04 00 13 0A];
 
-			qcom,display-topology = <1 0 1>;
+			qcom,display-topology = <1 1 1>;
+			qcom,default-topology-index = <0>;
+		};
+		timing@1{
+			qcom,mdss-dsi-panel-phy-timings = [00 16 05 05 14 1F 06
+				05 06 02 04 00 13 0A];
+
+			qcom,display-topology = <1 1 1>;
 			qcom,default-topology-index = <0>;
 		};
 	};
 };
+
+&dsi_oplus21221samsung_ams643ye01_1080_2400_cmd {
+	qcom,panel_voltage_vddi_name = "vddio";
+	qcom,panel_voltage_vddi = <0 1800000 1800000 1800000>;
+	qcom,panel_voltage_vddr_name = "vout";
+	qcom,panel_voltage_vddr = <1 1500000 1500000 1500000>;
+};
+
 
 &dsi_s643xy05_samsung_fhd_video {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_avdd>;
@@ -111,6 +157,7 @@
 	qcom,mdss-brightness-default-level = <1215>;
 	qcom,platform-te-gpio = <&tlmm 23 0>;
 	qcom,platform-reset-gpio = <&tlmm 47 0>;
+	qcom,bl-update-flag = "delay_until_first_frame";
 	oplus,mdss-dsi-vendor-name = "AMS644VA04";
 	oplus,mdss-dsi-manufacture = "samsung4096";
 	oplus,is-ramless;
@@ -152,8 +199,8 @@
 	qcom,mdss-brightness-default-level = <1215>;
 	qcom,platform-te-gpio = <&tlmm 23 0>;
 	qcom,platform-reset-gpio = <&tlmm 47 0>;
-	oplus,mdss-dsi-vendor-name = "AMS643YE01";
-	oplus,mdss-dsi-manufacture = "samsung2047";
+	oplus,mdss-dsi-vendor-name = "AMS644VA04";
+	oplus,mdss-dsi-manufacture = "samsung4096";
 	oplus,is-ramless;
 	oplus,bl_interpolate_nosub;
 
@@ -182,6 +229,11 @@
 	};
 };
 
+&dsi_sim_vid {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,platform-reset-gpio = <&tlmm 47 0>;
+};
+
 &dsi_oplus21291samsung_ams643ye01_1080_2400_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_avdd>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
@@ -190,11 +242,12 @@
 	qcom,mdss-brightness-max-level = <4095>;
 	qcom,mdss-dsi-bl-normal-max-level = <2047>;
 	qcom,mdss-brightness-normal-max-level = <2047>;
-	qcom,mdss-brightness-default-level = <400>;
+	qcom,mdss-brightness-default-level = <1600>;
 	qcom,platform-te-gpio = <&tlmm 23 0>;
 	qcom,platform-reset-gpio = <&tlmm 47 0>;
 	qcom,platform-panel-vout-gpio = <&tlmm 86 0>;
-	oplus,mdss-dsi-vendor-name = "AMS643YE01";
+	qcom,bl-update-flag = "delay_until_first_frame";
+	oplus,mdss-dsi-vendor-name = "AMS643AG02";
 	oplus,mdss-dsi-manufacture = "samsung2047";
 	qcom,mdss-dsi-dc-backlight-level = <520>;
 	oplus,osc-support;
@@ -202,7 +255,7 @@
 	oplus,mdss-dsi-osc-clk-mode1-rate = <169000>;
 	oplus,bl_interpolate_nosub;
 	qcom,mdss-panel-serial-number-index = <7>;
-
+	qcom,mdss-dsi-bl-hbm-min-level = <3743>;
 	qcom,ulps-enabled;
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",

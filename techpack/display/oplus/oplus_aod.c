@@ -113,7 +113,7 @@ error:
 
 	if (display->config.panel_mode == DSI_OP_CMD_MODE) {
 		dsi_display_clk_ctrl(display->dsi_clk_handle,
-				     DSI_ALL_CLKS, DSI_CLK_OFF);
+				     DSI_CORE_CLK, DSI_CLK_OFF);
 	}
 
 	mutex_unlock(&display->display_lock);

@@ -2106,6 +2106,9 @@ nxpTfaLiveDataList_t *tfaContGet1stLiveDataList_v6(nxpTfaContainer_t * cont)
 
 	// get last devlist
 	dev = tfaContGetDevList_v6(cont, maxdev - 1);
+	if(dev == NULL)
+		return NULL;
+
 	// the 1st livedata starts after the last device list
 	b = (uint8_t *) dev + sizeof(nxpTfaDeviceList_t) +
 	    dev->length * (sizeof(nxpTfaDescPtr_t));

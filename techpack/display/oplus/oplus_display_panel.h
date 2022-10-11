@@ -98,7 +98,7 @@ struct softiris_color
 
 /* #ifdef OPLUS_BUG_COMPATIBILITY */
 /* wangcheng@MULTIMEDIA.DISPLAY.LCD 2021/11/02  add cabc hidl config */
-#define PANEL_COMMOND_MAX  0xBF
+#define PANEL_COMMOND_MAX  0xBD
 /* #endif */
 #define PANEL_IOCTL_SET_POWER				  PANEL_IOW(0x01, struct panel_vol_set)
 #define PANEL_IOCTL_GET_POWER				  PANEL_IOWR(0x02, struct panel_vol_get)
@@ -161,14 +161,11 @@ struct softiris_color
 #define PANEL_IOCTL_SET_SHUTDOWN_FLAG		PANEL_IOWR(0xBC, unsigned int)
 
 #ifdef OPLUS_FEATURE_AOD_RAMLESS
-#define PANEL_IOCTL_SET_AOD_AREA              PANEL_IOWR(0x2E, struct aod_area)
-#define PANEL_IOCTL_GET_AOD_AREA              PANEL_IOWR(0xB9, struct aod_area)
+#define PANEL_IOCTL_SET_AOD_AREA              PANEL_IOWR(0x2E, struct aod_area_para)
+#define PANEL_IOCTL_GET_AOD_AREA              PANEL_IOWR(0xB9, struct aod_area_para)
 #define PANEL_IOCTL_SET_VIDEO                 PANEL_IOWR(0xBA, unsigned int)
 #define PANEL_IOCTL_GET_VIDEO                 PANEL_IOWR(0xBB, unsigned int)
 #endif /* OPLUS_FEATURE_AOD_RAMLESS */
-#define PANEL_IOCTL_GET_FAILSAFE              PANEL_IOWR(0xBE, unsigned int)
-#define PANEL_IOCTL_SET_FAILSAFE              PANEL_IOWR(0xBD, unsigned int)
-
 /*oplus ioctl case end*/
 
 int oplus_display_panel_init(void);

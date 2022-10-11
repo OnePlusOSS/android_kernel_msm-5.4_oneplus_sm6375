@@ -223,6 +223,7 @@ static ssize_t fast_chg_type_show(struct device *dev, struct device_attribute *a
                 char *buf)
 {
 	struct oplus_chg_chip *chip = NULL;
+	int type = oplus_chg_get_fast_chg_type();
 
 	chip = (struct oplus_chg_chip *)dev_get_drvdata(oplus_usb_dir);
 	if (!chip) {
@@ -230,7 +231,11 @@ static ssize_t fast_chg_type_show(struct device *dev, struct device_attribute *a
 		return -EINVAL;
 	}
 
-	return sprintf(buf, "%d\n", oplus_chg_get_fast_chg_type());
+	if (CHARGER_SUBTYPE_PD == type && chip->pd_svooc) {
+		type = CHARGER_SUBTYPE_DEFAULT;
+	}
+
+	return sprintf(buf, "%d\n", type);
 }
 static DEVICE_ATTR_RO(fast_chg_type);
 
@@ -583,7 +588,8 @@ static ssize_t mmi_charging_enable_store(struct device *dev, struct device_attri
 				oplus_chg_clear_chargerid_info();
 			}
 			chip->mmi_fastchg = 1;
-			oplus_chg_turn_on_charging_in_work();
+			if (!chip->otg_online)
+				oplus_chg_turn_on_charging_in_work();
 			if (oplus_chg_get_voocphy_support() == ADSP_VOOCPHY) {
 				oplus_adsp_voocphy_turn_on();
 			}

@@ -16,6 +16,7 @@
 #include "../../../../kernel/msm-5.4/drivers/power/supply/qcom/battery.h"
 #include <linux/iio/iio.h>
 #include <dt-bindings/iio/qti_power_supply_iio.h>
+#include <linux/nvmem-consumer.h>
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -679,6 +680,7 @@ struct smb_charger {
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	int			pre_current_ma;
 	bool			is_dpdm_on_usb;
+	bool 			pd_not_rise_vbus_only_5v;
 	struct delayed_work	divider_set_work;
 	struct work_struct	dpdm_set_work;
 	struct work_struct	chargerid_switch_work;
@@ -707,6 +709,7 @@ struct smb_charger {
 	bool external_cclogic;
 	bool			first_hardreset;
 	bool			keep_vbus_5v;
+	struct nvmem_cell	*soc_backup_nvmem;
 #endif
 };
 

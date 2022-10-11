@@ -77,7 +77,18 @@ int touch_i2c_read_block(struct i2c_client *client, u16 addr,
 {
 	int retval;
 	unsigned char buffer[2] = {(addr >> 8) & 0xff, addr & 0xff};
-	struct touchpanel_data *ts = i2c_get_clientdata(client);
+	struct touchpanel_data *ts = NULL;
+
+	if (!client) {
+		dump_stack();
+		return -1;
+	}
+
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		dump_stack();
+		return -1;
+	}
 
 	if (!ts->interface_data.register_is_16bit) { /* if register is 8bit*/
 		retval = touch_i2c_read(client, &buffer[1], 1, data, length);
@@ -146,7 +157,18 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr,
 	unsigned char retry;
 	unsigned int total_length = 0;
 	struct i2c_msg msg[1];
-	struct touchpanel_data *ts = i2c_get_clientdata(client);
+	struct touchpanel_data *ts = NULL;
+
+	if (!client) {
+		dump_stack();
+		return -1;
+	}
+
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		dump_stack();
+		return -1;
+	}
 
 	mutex_lock(&ts->interface_data.bus_mutex);
 
@@ -270,10 +292,16 @@ int touch_i2c_read_byte(struct i2c_client *client, unsigned short addr)
 {
 	int retval = 0;
 	unsigned char buf[2] = {0};
-	struct touchpanel_data *ts = i2c_get_clientdata(client);
+	struct touchpanel_data *ts = NULL;
 
 	if (!client) {
 		dump_stack();
+		return -1;
+	}
+
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		TPD_INFO("%s: ts is null\n", __func__);
 		return -1;
 	}
 
@@ -339,10 +367,15 @@ int touch_i2c_read_word(struct i2c_client *client, unsigned short addr)
 {
 	int retval;
 	unsigned char buf[2] = {0};
-	struct touchpanel_data *ts = i2c_get_clientdata(client);
+	struct touchpanel_data *ts = NULL;
 
 	if (!client) {
 		dump_stack();
+		return -1;
+	}
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		TPD_INFO("%s: ts is null\n", __func__);
 		return -1;
 	}
 
@@ -413,7 +446,18 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 	unsigned char retry;
 	struct i2c_msg msg[2];
 	struct i2c_msg message;
-	struct touchpanel_data *ts = i2c_get_clientdata(client);
+	struct touchpanel_data *ts = NULL;
+
+	if (!client) {
+		dump_stack();
+		return -1;
+	}
+
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		dump_stack();
+		return -1;
+	}
 
 	mutex_lock(&ts->interface_data.bus_mutex);
 
@@ -618,7 +662,18 @@ inline int touch_i2c_write(struct i2c_client *client, char *writebuf,
 {
 	int retval;
 	u16 addr;
-	struct touchpanel_data *ts = i2c_get_clientdata(client);
+	struct touchpanel_data *ts = NULL;
+
+	if (!client) {
+		dump_stack();
+		return -1;
+	}
+
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		dump_stack();
+		return -1;
+	}
 
 	if (!ts->interface_data.register_is_16bit) {
 		addr = writebuf[0] & 0xff;

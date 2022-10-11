@@ -394,4 +394,6 @@
 #define SY6970_DEV_REV_MASK        0x03
 #define SY6970_DEV_REV_SHIFT       0
 
+extern void oplus_set_usb_props_type(enum power_supply_type type);
+
 #endif

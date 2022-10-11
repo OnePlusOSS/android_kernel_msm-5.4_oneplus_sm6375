@@ -24,6 +24,12 @@
 #define OV16A1Q_SENSOR_ID		0x1641
 #define IMX581_SENSOR_ID		0x0581
 #define S5KJN1SQ_SENSOR_ID		0x38e1
+#define HI1336_SENSOR_ID		0x1336
+#define SC1300CS_SENSOR_ID		0xc628
+#define SC800CS_SENSOR_ID		0xd126
+#define S5K3P9SP_SENSOR_ID		0x3109
+#define SC201CS_DEPTH_SENSOR_ID		0xeb2C
+#define SC201CS_MICRO_SENSOR_ID		0xeb
 
 struct cam_sensor_settings sensor_settings = {
 #include "cam_sensor_settings.h"
@@ -45,6 +51,12 @@ struct cam_sensor_settings sensor_init_settings = {
 #include "init_camera_setting/ov16a1q_setting.h"
 #include "init_camera_setting/imx581_setting.h"
 #include "init_camera_setting/s5kjn1sq_setting.h"
+#include "init_camera_setting/hi1336_setting.h"
+#include "init_camera_setting/sc800cs_setting.h"
+#include "init_camera_setting/sc1300cs_setting.h"
+#include "init_camera_setting/s5k3p9sp_setting.h"
+#include "init_camera_setting/sc201cs_depth_setting.h"
+#include "init_camera_setting/sc201cs_micro_setting.h"
 };
 
 /* Add for AT camera test */
@@ -119,6 +131,24 @@ long oplus_cam_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 			break;
 		case S5KJN1SQ_SENSOR_ID:
 			ptr = &sensor_settings.s5kjn1sq_setting;
+			break;
+		case HI1336_SENSOR_ID:
+			ptr = &sensor_settings.hi1336_setting;
+			break;
+		case SC1300CS_SENSOR_ID:
+			ptr = &sensor_settings.sc1300cs_setting;
+			break;
+		case SC800CS_SENSOR_ID:
+			ptr = &sensor_settings.sc800cs_setting;
+			break;
+		case S5K3P9SP_SENSOR_ID:
+			ptr = &sensor_settings.s5k3p9sp_setting;
+			break;
+		case SC201CS_DEPTH_SENSOR_ID:
+			ptr = &sensor_settings.sc201cs_depth_setting;
+			break;
+		case SC201CS_MICRO_SENSOR_ID:
+			ptr = &sensor_settings.sc201cs_micro_setting;
 			break;
 		default:
 			break;
@@ -241,6 +271,30 @@ int sensor_start_thread(void *arg) {
 			case S5KJN1SQ_SENSOR_ID:
 				ptr = &sensor_init_settings.s5kjn1sq_setting;
 				CAM_INFO(CAM_SENSOR, "S5KJN1SQ_SENSOR_ID");
+				break;
+			case HI1336_SENSOR_ID:
+				ptr = &sensor_init_settings.hi1336_setting;
+				CAM_INFO(CAM_SENSOR, "HI1336_SENSOR_ID");
+				break;
+			case SC1300CS_SENSOR_ID:
+				ptr = &sensor_init_settings.sc1300cs_setting;
+				CAM_INFO(CAM_SENSOR, "SC1300CS_SENSOR_ID");
+				break;
+			case SC800CS_SENSOR_ID:
+				ptr = &sensor_init_settings.sc800cs_setting;
+				CAM_INFO(CAM_SENSOR, "SC800CS_SENSOR_ID");
+				break;
+			case S5K3P9SP_SENSOR_ID:
+				ptr = &sensor_init_settings.s5k3p9sp_setting;
+				CAM_INFO(CAM_SENSOR, "S5K3P9SP_SENSOR_ID");
+				break;
+			case SC201CS_DEPTH_SENSOR_ID:
+				ptr = &sensor_init_settings.sc201cs_depth_setting;
+				CAM_INFO(CAM_SENSOR, "SC201CS_SENSOR_DEPTH_SENSOR");
+				break;
+			case SC201CS_MICRO_SENSOR_ID:
+				ptr = &sensor_init_settings.sc201cs_micro_setting;
+				CAM_INFO(CAM_SENSOR, "SC201CS_SENSOR_MICRO_SENSOR");
 				break;
 			default:
 			    CAM_INFO(CAM_SENSOR, "no matching sensor_id");

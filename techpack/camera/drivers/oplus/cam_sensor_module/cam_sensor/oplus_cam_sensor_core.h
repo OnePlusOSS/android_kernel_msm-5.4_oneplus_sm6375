@@ -6,6 +6,9 @@
 #ifndef _OPLUS_CAM_SENSOR_CORE_H_
 #define _OPLUS_CAM_SENSOR_CORE_H_
 #include "cam_sensor_dev.h"
+#include "../cam_flash/oplus_cam_flash_dev.h"
+
+extern struct cam_flash_settings flash_ftm_data;
 
 /*uint32_t oplus_cam_sensor_addr_is_byte_type(struct cam_sensor_ctrl_t *s_ctrl, struct cam_camera_slave_info *slave_info);*/
 int32_t oplus_cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,

@@ -65,6 +65,10 @@
 #include "oplus_onscreenfingerprint.h"
 #endif
 
+#ifdef OPLUS_BUG_STABILITY
+#include "oplus_dc_diming.h"
+#endif
+
 /* defines for secure channel call */
 #define MEM_PROTECT_SD_CTRL_SWITCH 0x18
 #define MDP_DEVICE_ID            0x1A
@@ -1528,6 +1532,9 @@ static void sde_kms_complete_commit(struct msm_kms *kms,
 		_sde_kms_release_splash_resource(sde_kms, crtc);
 
 	SDE_EVT32_VERBOSE(SDE_EVTLOG_FUNC_EXIT);
+#ifdef OPLUS_BUG_STABILITY
+	oplus_notify_hbm_off();
+#endif
 	SDE_ATRACE_END("sde_kms_complete_commit");
 }
 

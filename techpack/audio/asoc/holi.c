@@ -49,6 +49,13 @@
 #include "codecs/sia81xx/sia81xx_aux_dev_if.h"
 //#endif /* OPLUS_ARCH_EXTENDS */
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+#include "feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err
+#undef dev_err
+#define dev_err dev_err_fb
+#endif
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 #define DRV_NAME "holi-asoc-snd"
 #define __CHIPSET__ "HOLI "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
@@ -98,6 +105,17 @@
 #define WCN_CDC_SLIM_TX_CH_MAX 2
 #define WCN_CDC_SLIM_TX_CH_MAX_LITO 3
 
+#ifdef CONFIG_SND_SOC_AW87XXX
+extern int aw87xxx_add_codec_controls(void *codec);
+extern int aw87xxx_set_profile(int dev_index, char *profile);
+static char *aw_profile[] = {"Music", "Off"};
+static const char *const mode_function[] = { "0", "1" };
+enum aw87xxx__dev_index {
+	 AW_DEV_0 = 0,
+	 AW_DEV_1
+};
+static SOC_ENUM_SINGLE_EXT_DECL(aw87xxx_mode, mode_function);
+#endif /* CONFIG_SND_SOC_AW87XXX */
 enum {
 	RX_PATH = 0,
 	TX_PATH,
@@ -116,7 +134,11 @@ enum {
 	TDM_PORT_MAX,
 };
 
+#ifdef CONFIG_SND_SOC_AW882XX
+#define TDM_MAX_SLOTS 4
+#else
 #define TDM_MAX_SLOTS 8
+#endif
 #define TDM_SLOT_WIDTH_BITS 32
 
 enum {
@@ -289,6 +311,64 @@ static u32 mi2s_ebit_clk[MI2S_MAX] = {
 
 static struct mi2s_conf mi2s_intf_conf[MI2S_MAX];
 
+#ifdef CONFIG_SND_SOC_AW87XXX
+static int aw87389_rcv_mode_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	pr_info("%s: get mode\n", __func__);
+	return 0;
+}
+static int aw87389_rcv_mode_set(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+	unsigned char en = 0;
+	en = ucontrol->value.integer.value[0];
+	if (en) {
+		ret = aw87xxx_set_profile(AW_DEV_0, aw_profile[0]);
+		if (ret < 0) {
+			pr_err("[Awinic] %s: set profile[%s] failed",__func__, aw_profile[0]);
+			return ret;
+		}
+	}
+	else {
+		ret = aw87xxx_set_profile(AW_DEV_0, aw_profile[1]);
+		if (ret < 0) {
+			pr_err("[Awinic] %s: set profile[%s] failed",__func__, aw_profile[1]);
+			return ret;
+		}
+	}
+	return 0;
+}
+static int aw87389_spk_mode_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	pr_info("%s: get mode\n", __func__);
+	return 0;
+}
+static int aw87389_spk_mode_set(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+	unsigned char en;
+	en = ucontrol->value.integer.value[0];
+	if (en) {
+		ret = aw87xxx_set_profile(AW_DEV_1, aw_profile[0]);
+		if (ret < 0) {
+			pr_err("[Awinic] %s: set profile[%s] failed", __func__, aw_profile[0]);
+			return ret;
+		}
+	}
+	else {
+		ret = aw87xxx_set_profile(AW_DEV_1, aw_profile[1]);
+		if (ret < 0) {
+			pr_err("[Awinic] %s: set profile[%s] failed",__func__, aw_profile[1]);
+			return ret;
+		}
+	}
+	return 0;
+}
+#endif /* CONFIG_SND_SOC_AW87XXX */
 /* Default configuration of TDM channels */
 static struct dev_config tdm_rx_cfg[TDM_INTERFACE_MAX][TDM_PORT_MAX] = {
 	{ /* PRI TDM */
@@ -418,7 +498,11 @@ static struct tdm_dev_config pri_tdm_dev_config[MAX_PATH][TDM_PORT_MAX] = {
 		{ {0xFFFF} }, /* RX_7 */
 	},
 	{
+#ifdef CONFIG_SND_SOC_AW882XX
+		{ {0,   4,      8, 12} }, /* TX_0 */
+#else
 		{ {0,   4,      8, 12, 0xFFFF} }, /* TX_0 */
+#endif
 		{ {8,  12, 0xFFFF} }, /* TX_1 */
 		{ {16, 20, 0xFFFF} }, /* TX_2 */
 		{ {24, 28, 0xFFFF} }, /* TX_3 */
@@ -431,7 +515,11 @@ static struct tdm_dev_config pri_tdm_dev_config[MAX_PATH][TDM_PORT_MAX] = {
 
 static struct tdm_dev_config sec_tdm_dev_config[MAX_PATH][TDM_PORT_MAX] = {
 	{ /* SEC TDM */
+#ifdef CONFIG_SND_SOC_AW882XX
+		{ {0, 4, 8, 12} }, /* RX_0 */
+#else
 		{ {0,   4, 0xFFFF} }, /* RX_0 */
+#endif
 		{ {8,  12, 0xFFFF} }, /* RX_1 */
 		{ {16, 20, 0xFFFF} }, /* RX_2 */
 		{ {24, 28, 0xFFFF} }, /* RX_3 */
@@ -441,7 +529,11 @@ static struct tdm_dev_config sec_tdm_dev_config[MAX_PATH][TDM_PORT_MAX] = {
 		{ {0xFFFF} }, /* RX_7 */
 	},
 	{
+#ifdef CONFIG_SND_SOC_AW882XX
+		{ {0,   4, 8, 12} }, /* TX_0 */
+#else
 		{ {0,   4, 0xFFFF} }, /* TX_0 */
+#endif
 		{ {8,  12, 0xFFFF} }, /* TX_1 */
 		{ {16, 20, 0xFFFF} }, /* TX_2 */
 		{ {24, 28, 0xFFFF} }, /* TX_3 */
@@ -770,7 +862,11 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 };
 
 /* set audio task affinity to core 1 & 2 */
+#ifndef OPLUS_ARCH_EXTENDS
 static const unsigned int audio_core_list[] = {1, 2};
+#else /* OPLUS_ARCH_EXTENDS */
+static const unsigned int audio_core_list[] = {0, 1, 2, 3};
+#endif /* OPLUS_ARCH_EXTENDS */
 static cpumask_t audio_cpu_map = CPU_MASK_NONE;
 static struct dev_pm_qos_request *msm_audio_req = NULL;
 static unsigned int qos_client_active_cnt = 0;
@@ -3612,6 +3708,12 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 			msm_vi_feed_tx_ch_get, msm_vi_feed_tx_ch_put),
 	SOC_SINGLE_MULTI_EXT("TDM Slot Map", SND_SOC_NOPM, 0, 255, 0,
 			TDM_MAX_SLOTS + MAX_PATH, NULL, tdm_slot_map_put),
+#ifdef CONFIG_SND_SOC_AW87XXX
+	SOC_ENUM_EXT("aw87xxx_rcv_switch",aw87xxx_mode ,
+			aw87389_rcv_mode_get, aw87389_rcv_mode_set),
+	SOC_ENUM_EXT("aw87xxx_spk_switch",aw87xxx_mode ,
+			aw87389_spk_mode_get, aw87389_spk_mode_set),
+#endif /* CONFIG_SND_SOC_AW87XXX */
 };
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
@@ -5368,6 +5470,34 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 	#ifdef OPLUS_FEATURE_AUDIO_FTM
 	TX_CDC_DMA_HOSTLESS_DAILINK("TX4_CDC_DMA Hostless", "TX4_CDC_DMA Hostless", tx4_cdcdma_hostless),
 	#endif /* OPLUS_FEATURE_AUDIO_FTM */
+#ifdef CONFIG_SND_SOC_AW882XX
+	{/* hw:x,44 */
+		.name = "SEC_TDM_TX_0_HOSTLESS",
+		.stream_name = "SEC_TDM_TX_0_HOSTLESS Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_tdm_tx_hostless),
+	},
+
+	{/* hw:x,45 */
+		.name = "SEC_TDM_RX_0_Hostless",
+		.stream_name = "Secondary TDM0 Hostless Playback",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_tdm_rx_0_hostless),
+	},
+#endif
 };
 
 static struct snd_soc_dai_link msm_common_be_dai_links[] = {
@@ -5973,6 +6103,57 @@ static struct snd_soc_dai_link tfa98xx_mono_be_dai_links[] = {
 };
 #endif /* OPLUS_ARCH_EXTENDS */
 
+#ifdef CONFIG_SND_SOC_AW882XX
+extern void afe_set_spk_type(int enable);
+SND_SOC_DAILINK_DEFS(aw_sec_tdm_rx_0,
+	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-q6-tdm.36880")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("aw882xx_smartpa.4-0034", "aw882xx-aif-4-34"),
+						COMP_CODEC("aw882xx_smartpa.4-0035", "aw882xx-aif-4-35"),
+						COMP_CODEC("aw882xx_smartpa.4-0036", "aw882xx-aif-4-36"),
+						COMP_CODEC("aw882xx_smartpa.4-0037", "aw882xx-aif-4-37")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+
+static struct snd_soc_dai_link aw_be_dai_links[] = {
+	{
+		.name = LPASS_BE_SEC_TDM_RX_0,
+		.stream_name = "Secondary TDM0 Playback",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.id = MSM_BACKEND_DAI_SEC_TDM_RX_0,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &holi_tdm_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(aw_sec_tdm_rx_0),
+	},
+};
+#endif
+
+
+#ifdef OPLUS_ARCH_EXTENDS
+//Nan.Zhong@MULTIMEDIA.AUDIODRIVER.SMARTPA, 2021/07/05, Add for tfa98xx bringup
+SND_SOC_DAILINK_DEFS(tfa98xx_stereo_pri_mi2s_rx,
+	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-q6-mi2s.0")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("tfa98xx.2-0034", "tfa98xx-aif-2-34"),
+	                   COMP_CODEC("tfa98xx.2-0037", "tfa98xx-aif-2-37")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+
+static struct snd_soc_dai_link tfa98xx_stereo_be_dai_links[] = {
+	{
+		.name = LPASS_BE_PRI_MI2S_RX,
+		.stream_name = "Primary MI2S Playback",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.id = MSM_BACKEND_DAI_PRI_MI2S_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm_mi2s_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tfa98xx_stereo_pri_mi2s_rx),
+	},
+};
+#endif /* OPLUS_ARCH_EXTENDS */
+
 static struct snd_soc_dai_link msm_holi_dai_links[
 			ARRAY_SIZE(msm_common_dai_links) +
 			ARRAY_SIZE(msm_common_misc_fe_dai_links) +
@@ -6088,9 +6269,16 @@ static int msm_populate_dai_link_component_of_node(
 
 				np = dai_link[i].codecs[j].of_node;
 				if (!of_device_is_available(np)) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* Add for audio kernel feedback */
+					dev_err_not_fb(cdev, "%s: codec is disabled: %s\n",
+						__func__,
+						np->full_name);
+#else
 					dev_err(cdev, "%s: codec is disabled: %s\n",
 						__func__,
 						np->full_name);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 					dai_link[i].codecs[j].of_node = NULL;
 					continue;
 				}
@@ -6302,6 +6490,10 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 								pr_info("%s: use nxp mono dailink replace\n", __func__);
 								memcpy(temp_link, &tfa98xx_mono_be_dai_links[0],
 										sizeof(tfa98xx_mono_be_dai_links[0]));
+							} else if (!strcmp(product_name, "nxp_stereo")) {
+								pr_info("%s: use nxp stereo dailink replace\n", __func__);
+								memcpy(temp_link, &tfa98xx_stereo_be_dai_links[0],
+										sizeof(tfa98xx_stereo_be_dai_links[0]));
 							}
 							#endif
 						}
@@ -6333,6 +6525,26 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		}
 #endif
 
+#ifdef OPLUS_ARCH_EXTENDS
+	if (!of_property_read_string(dev->of_node, oplus_speaker_type,
+		&product_name)) {
+#ifdef CONFIG_SND_SOC_AW882XX
+			for (i = 0; i < ARRAY_SIZE(msm_holi_dai_links); i++) {
+				temp_link = &msm_holi_dai_links[i];
+				if (temp_link->id == MSM_BACKEND_DAI_SEC_TDM_RX_0) {
+					pr_info("%s: sec tdm speaker product %s\n", __func__, product_name);
+					if (!strcmp(product_name, "aw882xx")) {
+						pr_info("%s: use aw882xx dailink replace\n", __func__);
+						memcpy(temp_link, &aw_be_dai_links[0],
+								sizeof(aw_be_dai_links[0]));
+						afe_set_spk_type(true);
+					} else
+						afe_set_spk_type(false);
+				}
+			}
+#endif
+		}
+#endif
 		rc = of_property_read_u32(dev->of_node, "qcom,afe-rxtx-lb",
 				&val);
 		if (!rc && val) {
@@ -6398,6 +6610,14 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			__func__);
 		return ret;
 	}
+
+#ifdef CONFIG_SND_SOC_AW87XXX
+	ret = aw87xxx_add_codec_controls((void *)component);
+	if (ret < 0) {
+		pr_err("%s: add_codec_controls failed, ret %d\n",__func__, ret);
+		return ret;
+	};
+#endif /* CONFIG_SND_SOC_AW87XXX */
 
 	dapm = snd_soc_component_get_dapm(component);
 

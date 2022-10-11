@@ -303,7 +303,7 @@ EXPORT_SYMBOL_GPL(fan53870_cam_ldo_disable);
 
 int is_fan53870_pmic(void)
 {
-    pr_err("[hjz_debug]probe pmic, is_fan53870_1p1: %d \n", is_fan53870_1p1);
+    pr_err("probe pmic, is_fan53870_1p1: %d \n", is_fan53870_1p1);
     return is_fan53870_1p1;
 }
 EXPORT_SYMBOL(is_fan53870_pmic);

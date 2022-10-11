@@ -81,58 +81,33 @@ static int __tcpc_class_complete_work(struct device *dev, void *data)
 	return 0;
 }
 
-#ifdef OPLUS_FEATURE_CHG_BASIC
-#ifndef CONFIG_QGKI
-#define OPLUS_RETRY_COUNT 60
-#define OPLUS_WORK_DELAY round_jiffies_relative(msecs_to_jiffies(500))
-static struct delayed_work tcpc_complete_work;
-static void oplus_tcpc_complete_work(struct work_struct *data)
-{
-
-	static int count = 0;
-	struct tcpc_device *tcpc_dev;
-
-	tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
-
-	if (!tcpc_dev) {
-		count++;
-		pr_info("%s type_c_port0 not found retry count=%d\n", __func__, count);
-		if (count < OPLUS_RETRY_COUNT)
-			schedule_delayed_work(&tcpc_complete_work, OPLUS_WORK_DELAY);
-		return;
-	}
-
-	if (!IS_ERR(tcpc_class)) {
-		class_for_each_device(tcpc_class, NULL, NULL,
-			__tcpc_class_complete_work);
-	}
-}
-#endif /* !CONFIG_QGKI */
-#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 static int __init tcpc_class_complete_init(void)
 {
 #ifdef OPLUS_FEATURE_CHG_BASIC
-#ifndef CONFIG_QGKI
-	struct tcpc_device *tcpc_dev;
-
-	pr_info("%s\n", __func__);
-	tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
-
-	if (!tcpc_dev) {
-		pr_info("%s type_c_port0 not found,start retry\n", __func__);
-		INIT_DELAYED_WORK(&tcpc_complete_work, oplus_tcpc_complete_work);
-		schedule_delayed_work(&tcpc_complete_work, OPLUS_WORK_DELAY);
-		return 0;
-	}
-#endif /* !CONFIG_QGKI */
-#endif /* OPLUS_FEATURE_CHG_BASIC */
+#ifdef CONFIG_QGKI
 	if (!IS_ERR(tcpc_class)) {
 		class_for_each_device(tcpc_class, NULL, NULL,
 			__tcpc_class_complete_work);
 	}
+#endif /* CONFIG_QGKI */
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 	return 0;
 }
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+void tcpc_late_sync(void)
+{
+#ifndef CONFIG_QGKI
+	if (!IS_ERR(tcpc_class)) {
+		class_for_each_device(tcpc_class, NULL, NULL,
+			__tcpc_class_complete_work);
+	}
+#endif /* !CONFIG_QGKI */
+}
+EXPORT_SYMBOL_GPL(tcpc_late_sync);
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+
 late_initcall_sync(tcpc_class_complete_init);
 #endif /* CONFIG_TCPC_NOTIFIER_LATE_SYNC */
 
@@ -140,4 +115,3 @@ MODULE_DESCRIPTION("Richtek TypeC Port Control Core");
 MODULE_AUTHOR("Jeff Chang <jeff_chang@richtek.com>");
 MODULE_VERSION(TCPC_CORE_VERSION);
 MODULE_LICENSE("GPL");
-MODULE_SOFTDEP("pre: oplus_chg");

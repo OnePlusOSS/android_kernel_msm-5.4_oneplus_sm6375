@@ -19,6 +19,7 @@
 #include <linux/list.h>
 #include <linux/iio/consumer.h>
 #include <linux/of_fdt.h>
+#include <linux/version.h>
 
 #define DEVINFO_NAME "devinfo"
 
@@ -32,6 +33,7 @@ struct device_info {
 	struct device *dev;
 	struct pinctrl *p_ctrl;
 	struct pinctrl_state *active[BOARD_GPIO_SUPPORT], *sleep[BOARD_GPIO_SUPPORT];
+	struct pinctrl_state *idle[BOARD_GPIO_SUPPORT];
 	struct list_head dev_list;
 };
 
@@ -93,12 +95,20 @@ static int device_info_open(struct inode *inode, struct file *file)
 	return single_open(file, devinfo_read_func, PDE_DATA(inode));
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+static const struct proc_ops device_node_fops = {
+	.proc_open = device_info_open,
+	.proc_read = seq_read,
+	.proc_release = single_release,
+};
+#else
 static const struct file_operations device_node_fops = {
 	.owner = THIS_MODULE,
 	.open = device_info_open,
 	.read = seq_read,
 	.release = single_release,
 };
+#endif
 
 static int devinfo_read_ufsplus_func(struct seq_file *s, void *v)
 {
@@ -116,13 +126,20 @@ static int device_info_for_ufsplus_open(struct inode *inode, struct file *file)
 	return single_open(file, devinfo_read_ufsplus_func, PDE_DATA(inode));
 }
 
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+static const struct proc_ops device_node_for_ufsplus_fops = {
+	.proc_open = device_info_for_ufsplus_open,
+	.proc_read = seq_read,
+	.proc_release = single_release,
+};
+#else
 static const struct file_operations device_node_for_ufsplus_fops = {
 	.owner = THIS_MODULE,
 	.open = device_info_for_ufsplus_open,
 	.read = seq_read,
 	.release = single_release,
 };
+#endif
 
 static int deviceid_read_func(struct seq_file *s, void *v)
 {
@@ -142,12 +159,20 @@ static int device_id_open(struct inode *inode, struct file *file)
 	return single_open(file, deviceid_read_func, PDE_DATA(inode));
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+static const struct proc_ops device_id_fops = {
+	.proc_open = device_id_open,
+	.proc_read = seq_read,
+	.proc_release = single_release,
+};
+#else
 static const struct file_operations device_id_fops = {
 	.owner = THIS_MODULE,
 	.open = device_id_open,
 	.read = seq_read,
 	.release = single_release,
 };
+#endif
 
 int register_device_id(struct device_info *dev_info, const char *label, const char *id_match, int id)
 {
@@ -266,6 +291,14 @@ static int parse_gpio_dts(struct device *dev, struct device_info *dev_info)
 				 dev_msg("Failed to get sleep[%d], check dts\n", i);
 				 continue;
 			}
+/*#ifdef OPLUS_FEATURE_TP_BASIC add for Aboard tristate match*/
+			snprintf(tmp, INFO_LEN, "aboard_gpio%d_idle", i);
+			dev_info->idle[i] = pinctrl_lookup_state(dev_info->p_ctrl, tmp);
+			if (IS_ERR_OR_NULL(dev_info->idle[i])) {
+				 dev_msg("Failed to get idle[%d] , check dts\n", i);
+				 continue;
+			}
+/*#endif OPLUS_FEATURE_TP_BASIC*/
 		}
 	}
 #else
@@ -280,8 +313,7 @@ static int parse_gpio_dts(struct device *dev, struct device_info *dev_info)
 
 static void set_gpios_active(struct device_info *dev_info)
 {
-	int i = 0;
-	int ret = 0;
+	int i = 0, ret = 0;
 	for (i = 0; i < BOARD_GPIO_SUPPORT; i++) {
 		if (!IS_ERR_OR_NULL(dev_info->p_ctrl) && !IS_ERR_OR_NULL(dev_info->active[i])) {
 			ret = pinctrl_select_state(dev_info->p_ctrl, dev_info->active[i]);
@@ -294,8 +326,7 @@ static void set_gpios_active(struct device_info *dev_info)
 
 static void set_gpios_sleep(struct device_info *dev_info)
 {
-	int i = 0;
-	int ret = 0;
+	int i = 0, ret = 0;
 	for (i = 0; i < BOARD_GPIO_SUPPORT; i++) {
 		if (!IS_ERR_OR_NULL(dev_info->p_ctrl) && !IS_ERR_OR_NULL(dev_info->sleep[i])) {
 			ret = pinctrl_select_state(dev_info->p_ctrl, dev_info->sleep[i]);
@@ -305,6 +336,22 @@ static void set_gpios_sleep(struct device_info *dev_info)
 		}
 	}
 }
+
+/*#ifdef OPLUS_FEATURE_TP_BASIC add for Aboard tristate match*/
+static void set_gpios_idle(struct device_info *dev_info)
+{
+	int i = 0, ret = 0;
+
+	for (i = 0; i < BOARD_GPIO_SUPPORT; i++) {
+		if (!IS_ERR_OR_NULL(dev_info->p_ctrl) && !IS_ERR_OR_NULL(dev_info->idle[i])) {
+			ret = pinctrl_select_state(dev_info->p_ctrl, dev_info->idle[i]);
+			dev_msg("set gpio idle ret[%d - %d]\n", i, ret);
+		} else {
+			dev_msg("pinctrl idle is Null[%d]\n", i);
+		}
+	}
+}
+/*#endif OPLUS_FEATURE_TP_BASIC*/
 
 static int init_other_hw_ids(struct platform_device *pdev)
 {
@@ -396,7 +443,6 @@ static int gpio_get_submask(struct device_node *np)
 		snprintf(tmp, INFO_LEN, "aboard-gpio%d", i);
 		gpio = of_get_named_gpio(np, tmp, 0);
 		if (gpio < 0) {
-			dev_msg("failed to get named gpio [%s] gpio[%d]\n", tmp, gpio);
 			continue;
 		}
 		ret = gpio_request(gpio, tmp);
@@ -548,8 +594,11 @@ reinit_aboard_id_for_brandon(struct device *dev, struct device_info *dev_info)
 
 	adc_value /= 1000;
 	dev_msg("adc value %d\n", adc_value);
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_OPROJECT)
 	operate = get_Operator_Version();
+#else
+	operate = 0;
+#endif
 	if ((2 == operate) || (8 == operate)) {
 		if ((adc_value >= 250) && (adc_value <= 400)) {
 			ret = 0;
@@ -586,12 +635,13 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 {
 	struct device_node *np;
 	int32_t hw_mask = 0;
-	int i = 0, ret = 0;
-	int id_size = 0, ignore_size = 0;
-	uint32_t *main_val = NULL, *sub_val = NULL, *rf_val = NULL, *ignore_list = NULL;
-	struct device_info *dev_info = g_dev_info;
+	int i = 0, j = 0, ret = 0;
+	int id_size = 0;
+	uint32_t *main_val = NULL, *sub_val = NULL, *rf_val = NULL, *region_val = NULL;
 	int active_val = 0, sleep_val = 0;
+	struct device_info *dev_info = g_dev_info;
 	bool match = false;
+	int sub_cnt = 1;
 
 	if (!dev) {
 		dev = dev_info->dev;
@@ -606,55 +656,54 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 		goto seccess;
 	}
 
-	np = of_find_compatible_node(dev->of_node, NULL, "hw-match, main-sub");
-	if (!np) {
-		dev_msg("failed to find node\n");
-		return -ENODEV;
+	if (of_find_compatible_node(dev->of_node, NULL, "hw-match, main-sub-a2")) {
+		sub_cnt = 2;
 	}
 
-	ignore_size = of_property_count_elems_of_size(np, "devinfo-match-ignore-list", sizeof(uint32_t));
-	if (ignore_size > 0) {
-		ignore_list = (uint32_t *)kzalloc(sizeof(uint32_t) * ignore_size, GFP_KERNEL);
-		if (!ignore_list) {
-			dev_msg("ignore_list alloc err\n");
-			return -ENOMEM;
-		}
-
-		of_property_read_u32_array(np, "devinfo-match-ignore-list", ignore_list, ignore_size);
-		for (i = 0; i < ignore_size; i++) {
-			/*dev_msg("ignore list doing match %d %d %d\n", i, *(ignore_list + i), get_project());*/
-			if (*(ignore_list + i) == get_project()) {
-				dev_msg("found in ignore list %d going to return success\n", get_project());
-				ret = 0;
-				goto ignore_match_success;
+	for (i = 0; i < sub_cnt; i++) {
+		if (!i) {
+			np = of_find_compatible_node(dev->of_node, NULL, "hw-match, main-sub");
+		} else {
+			np = of_find_compatible_node(dev->of_node, NULL, "hw-match, main-sub-a2");
+			if (np && id_size != of_property_count_elems_of_size(np, "aboard-patterns", sizeof(uint32_t))) {
+				dev_msg("a2 id size is not the same\n");
+				kfree(sub_val);
+				kfree(main_val);
+			} else {
+				dev_msg("a2 id size is the same\n");
 			}
 		}
-	}
-	dev_msg("not in ignore list, continue other match process %d\n", get_project());
+		if (!np) {
+			dev_msg("failed to find node\n");
+			return -ENODEV;
+		}
 
-	id_size =
-		of_property_count_elems_of_size(np, "aboard-patterns",
-						sizeof(uint32_t));
-	dev_msg("id_size = %x\n", id_size);
-	if (id_size > MAIN_BOARD_SUPPORT) {
-		return -ENODEV;
-	} else if (id_size == -EINVAL) {
-		/*ignore sub board id */
-		dev_msg("have no abord id node\n");
-		ret = 0;
-		goto seccess;
-	}
+		id_size =
+			of_property_count_elems_of_size(np, "aboard-patterns",
+				sizeof(uint32_t));
+		if (id_size > MAIN_BOARD_SUPPORT) {
+			return -ENODEV;
+		} else if (id_size == -EINVAL) {
+			/*ignore sub board id */
+			dev_msg("have no abord id node\n");
+			ret = 0;
+			goto seccess;
+		}
 
-	sub_val = (uint32_t *) kzalloc(sizeof(uint32_t) * id_size, GFP_KERNEL);
-	if (!sub_val) {
-		return -ENOMEM;
-	}
+		if (!sub_val) {
+			sub_val = (uint32_t *) kzalloc(sizeof(uint32_t) * id_size, GFP_KERNEL);
+			if (!sub_val) {
+				return -ENOMEM;
+			}
+		}
 
-	main_val = (uint32_t *) kzalloc(sizeof(uint32_t) * id_size, GFP_KERNEL);
-	if (!main_val) {
-		kfree(sub_val);
-		return -ENOMEM;
-	}
+		if (!main_val) {
+			main_val = (uint32_t *) kzalloc(sizeof(uint32_t) * id_size, GFP_KERNEL);
+			if (!main_val) {
+				kfree(sub_val);
+				return -ENOMEM;
+			}
+		}
 
 	if (of_property_read_bool(np, "rf_match_support")) {
 		rf_val = (uint32_t *) kzalloc(sizeof(uint32_t) * id_size, GFP_KERNEL);
@@ -669,8 +718,24 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 		rf_val = NULL;
 	}
 
-	of_property_read_u32_array(np, "aboard-patterns", sub_val, id_size);
-	of_property_read_u32_array(np, "match-projects", main_val, id_size);
+		if (of_property_count_elems_of_size(np, "region-patterns", sizeof(uint32_t)) > 0) {
+			region_val = (uint32_t *) kzalloc(sizeof(uint32_t) * id_size, GFP_KERNEL);
+			if (!region_val) {
+				kfree(main_val);
+				kfree(sub_val);
+				if (rf_val) {
+					kfree(rf_val);
+				}
+				return -ENOMEM;
+			}
+
+			of_property_read_u32_array(np, "region-patterns", region_val, id_size);
+		} else {
+			region_val = NULL;
+		}
+
+		of_property_read_u32_array(np, "aboard-patterns", sub_val, id_size);
+		of_property_read_u32_array(np, "match-projects", main_val, id_size);
 
 	if (of_property_read_bool(np, "use_pmic_adc")) {
 		hw_mask = pmic_get_submask(np, dev);
@@ -684,6 +749,7 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 		active_val = gpio_get_submask(np);
 		set_gpios_sleep(dev_info);
 		sleep_val = gpio_get_submask(np);
+		set_gpios_idle(dev_info);
 		if (active_val == 1 && sleep_val == 0) {		/*high-resistance*/
 			hw_mask = 0;
 		} else if (active_val == 1 && sleep_val == 1) {		/*external pull-up*/
@@ -692,10 +758,7 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 			hw_mask = 1;
 		}
 		dev_msg("active_val[%d] sleep_val[%d] hw_mask[%d]\n", active_val, sleep_val, hw_mask);
-		if (hw_mask < 0) {
-			ret = -EINVAL;
-			goto read_failed;
-		}
+
 	} else {
 		dev_msg("normal gpio judgement\n");
 		set_gpios_active(dev_info);
@@ -707,26 +770,44 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 		}
 	}
 
-	dev_msg("hw mask 0x%x\n", hw_mask);
+		dev_msg("aboard[%d] mask 0x%x\n", i, hw_mask);
 
-	for (i = 0; i < id_size; i++) {
-		if (*(main_val + i) != get_project()) {
-			continue;
-		}
+		match = false;
 
-		if (* (sub_val + i) == hw_mask) {
-			if (!rf_val) {
-				dev_msg("rf_val is null, matched\n");
-				match = true;
-			} else {
-				if (* (rf_val + i) == get_Modem_Version()) {
+		for (j = 0; j < id_size; j++) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_OPROJECT)
+			if (* (main_val + j) != get_project()) {
+				continue;
+			}
+			dev_msg("project is %d\n", get_project());
+#endif
+
+			if (* (sub_val + j) == hw_mask) {
+				if (!rf_val) {
+					dev_msg("rf_val is null, matched\n");
 					match = true;
 				} else {
-                                        dev_msg("no need check rftype\n");
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_OPROJECT)
+					if (* (rf_val + j) == get_Modem_Version()) {
+						match = true;
+					} else {
+						match = false;
+					}
+					dev_msg("modem version is %d\n", get_Modem_Version());
+#else
 					match = true;
+#endif
 				}
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_OPROJECT)
+				if (match && region_val) {
+					dev_msg("region is %d\n", get_Operator_Version());
+					if (* (region_val + j) != get_Operator_Version()) {
+						match = false;
+					}
+				}
+#endif
 			}
-		}
 
 		if (match) {
 			ret = 0;
@@ -734,25 +815,22 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 		}
 	}
 
-	if (!match) {
-		dev_msg("id not match\n");
-		ret = -ENODEV;
-		goto read_failed;
+		if (!match) {
+			dev_msg("aboard[%d] id not match\n", i);
+			ret = -ENODEV;
+			goto read_failed;
+		}
 	}
 
 read_failed:
 	kfree(sub_val);
-	sub_val = NULL;
 	kfree(main_val);
-	main_val = NULL;
 	if (rf_val) {
 		kfree(rf_val);
-		rf_val = NULL;
 	}
-
-ignore_match_success:
-	kfree(ignore_list);
-	ignore_list = NULL;
+	if (region_val) {
+		kfree(region_val);
+	}
 
 seccess:
 	if (!ret) {

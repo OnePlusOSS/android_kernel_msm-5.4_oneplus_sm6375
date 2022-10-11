@@ -3676,6 +3676,8 @@ int cam_vfe_bus_dump_wm_data(void *priv, void *cmd_args, uint32_t arg_size)
 	enum cam_vfe_bus_ver2_vfe_out_type         vfe_out_res_id;
 
 	vfe_out_res_id = cam_vfe_bus_get_out_res_id(event_info->res_id);
+    if (vfe_out_res_id == CAM_VFE_BUS_VER2_VFE_OUT_MAX)
+		return -ENODEV;
 	rsrc_node = &bus_priv->vfe_out[vfe_out_res_id];
 	rsrc_data = rsrc_node->res_priv;
 	for (i = 0; i < rsrc_data->num_wm; i++) {

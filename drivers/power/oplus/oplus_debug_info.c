@@ -156,78 +156,6 @@ enum {
 	OPLUS_CHG_NOTIFY_TOTAL,
 };
 
-struct oplus_chg_debug_info {
-	int initialized;
-
-	int pre_soc;
-	int cur_soc;
-	int pre_ui_soc;
-	int cur_ui_soc;
-	int soc_load_flag;
-	unsigned long sleep_tm_sec;
-	int soc_notified_flag;
-#define SOC_LOAD_DELAY (60 * 1000)
-	struct delayed_work soc_load_dwork;
-	int fast_chg_type;
-	int real_charger_type;
-	int pre_prop_status;
-	int chg_start_ui_soc;
-	int chg_start_temp;
-	int chg_start_time;
-	int chg_start_batt_volt;
-	int chg_end_soc;
-	int chg_end_temp;
-	int chg_end_time;
-	int chg_end_batt_volt;
-	int chg_total_time;
-	int total_time;
-	int total_time_count;
-
-	int pre_led_state;
-	int led_off_start_time;
-
-	int chg_cnt[OPLUS_NOTIFY_CHG_MAX_CNT];
-
-	int notify_type;
-	unsigned long long notify_flag;
-	struct mutex nflag_lock; 
-
-	struct power_supply *usb_psy;
-	struct power_supply *batt_psy;
-
-	int fastchg_stop_cnt;
-	int cool_down_by_user;
-	int chg_current_by_tbatt;
-	int chg_current_by_cooldown;
-	int fastchg_input_current;
-
-	struct vooc_charge_strategy *vooc_charge_strategy;
-	int vooc_charge_input_current_index;
-	int vooc_charge_cur_state_chg_time;
-
-	int vooc_max_input_volt;
-	int vooc_max_input_current;
-	int fcc_design;
-	int chg_full_notified_flag;
-	int rechg_counts;/*add for rechg counts*/
-	struct workqueue_struct *oplus_chg_debug_wq;
-#ifdef CONFIG_OPLUS_FEATURE_FEEDBACK
-	struct kernel_packet_info *dcs_info;
-	struct mutex dcs_info_lock;
-#define SEND_INFO_DELAY 3000
-	struct delayed_work send_info_dwork;
-#define SEND_INFO_MAX_CNT 5
-	int retry_cnt;
-#endif
-	char flag_reason[32];
-	char type_reason[32];
-	int vooc_mcu_error;
-	bool report_soh;
-	int batt_soh;
-	int batt_cc;
-	struct wireless_chg_debug_info wireless_info;/*add for wireless chg*/
-};
-
 struct vooc_charge_strategy *g_vooc_charge_strategy_p[OPLUS_FASTCHG_OUTPUT_POWER_MAX] = {
 	NULL,
 	NULL,
@@ -803,6 +731,13 @@ static void oplus_chg_print_debug_info(struct oplus_chg_chip *chip)
 					//chip->voocphy.fastchg_start, chip->voocphy.fastchg_ing, chip->voocphy.fastchg_dummy_start,
 					//chip->voocphy.fastchg_to_normal, chip->voocphy.fastchg_to_warm, chip->voocphy.chg_ctl_param_info);
 		}
+
+		if(oplus_chg_debug_info.wirelesspen_info.support) {
+			ret += snprintf(&oplus_chg_debug_msg[ret], OPLUS_CHG_DEBUG_MSG_LEN - ret,
+					"WirelessPen_GetAddr_Timeout@@%lld, "
+					"WirelessPen_Verify_Failed@@%lld, ",
+					oplus_chg_debug_info.wirelesspen_info.ble_timeout_cnt, oplus_chg_debug_info.wirelesspen_info.verify_failed_cnt);
+		}/*add for wireless pen*/
 
 		if (chg_check_point_debug&OPEN_LOG_BIT) {
 			int i;

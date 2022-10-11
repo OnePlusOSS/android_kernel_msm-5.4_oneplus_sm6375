@@ -361,6 +361,9 @@ struct low_curr_full_condition{
 #define VOOC_CMD_ADAPTER_CHECK_COMMU_PROCESS 0xF1
 #define VOOC_CMD_TELL_MODEL_PROCESS 0xF2
 #define VOOC_CMD_ASK_BATT_SYS_PROCESS 0xF3
+#define VOOC_CMD_RECEVICE_DATA_0E   0x0E
+#define VOOC_CMD_RECEVICE_DATA_0F   0x0F
+
 
 #define OPLUS_IS_VUBS_OK_PREDATA_VOOC20	((u16)0xa002)
 #define OPLUS_IS_VUBS_OK_PREDATA_VOOC30	((u16)0xa001)
@@ -581,7 +584,7 @@ struct oplus_voocphy_manager {
 	int sub_batt_icharging;
 	unsigned int ask_current_first;
 	unsigned int vbus; 			/*  vbus voltage */
-	unsigned int current_pwd;		/* copycat adapter current thd */
+	int current_pwd;		  /*copycat adapter current thd*/
 	unsigned int curr_pwd_count;		/* count for ccopycat adapter is ornot */
 
 	unsigned int slave_cp_enable_thr;
@@ -671,6 +674,7 @@ struct oplus_voocphy_manager {
 	int irq_hw_timeout_num;
 
 	int irq_rxdone_num;
+	int irq_tx_fail_num;
 
 	int batt_fake_temp;
 	int batt_fake_soc;
@@ -699,6 +703,8 @@ struct oplus_voocphy_manager {
 	unsigned int vooc_ntime_full_voltage;
 	int ovp_reg;
 	int ocp_reg;
+	int adapter_check_vooc_head_count;
+	int adapter_check_cmd_data_count;
 };
 
 struct oplus_voocphy_operations {

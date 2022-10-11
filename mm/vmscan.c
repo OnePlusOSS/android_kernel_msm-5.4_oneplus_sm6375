@@ -4068,30 +4068,6 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 	finish_wait(&pgdat->kswapd_wait, &wait);
 }
 
-#ifdef OPLUS_FEATURE_PERFORMANCE
-/* disable aux kswapd migrate to cpu6 and
- * cpu 7 */
-extern long sched_setaffinity(pid_t pid, const struct cpumask *in_mask);
-static inline int set_thread_affinity_littlecore(struct task_struct *tsk)
-{
-	int ret;
-	struct cpumask mask;
-
-	cpumask_clear(&mask);
-
-	cpumask_set_cpu(0, &mask);
-	cpumask_set_cpu(1, &mask);
-	cpumask_set_cpu(2, &mask);
-	cpumask_set_cpu(3, &mask);
-	cpumask_set_cpu(4, &mask);
-	cpumask_set_cpu(5, &mask);
-
-	ret = sched_setaffinity(tsk->pid, &mask);
-
-	return ret;
-}
-#endif /* OPLUS_FEATURE_PERFORMANCE */
-
 /*
  * The background pageout daemon, started as a kernel thread
  * from the init process.
@@ -4115,12 +4091,6 @@ static int kswapd(void *p)
 
 	if (!cpumask_empty(cpumask))
 		set_cpus_allowed_ptr(tsk, cpumask);
-
-#ifdef OPLUS_FEATURE_PERFORMANCE
-/* disable aux kswapd migrate to cpu6 and
- * cpu 7 */
-	set_thread_affinity_littlecore(current);
-#endif /* OPLUS_FEATURE_PERFORMANCE */
 
 	/*
 	 * Tell the memory management that we're a "memory allocator",

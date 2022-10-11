@@ -3,7 +3,7 @@
 	.reg_setting =
 	{
 		{.reg_addr = 0x0103, .reg_data = 0x01, .delay = 0x00, .data_mask = 0xff}, \
-		{.reg_addr = 0x0102, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
+		{.reg_addr = 0x0102, .reg_data = 0x01, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0301, .reg_data = 0x48, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0302, .reg_data = 0x31, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0303, .reg_data = 0x04, .delay = 0x00, .data_mask = 0xff}, \
@@ -11,6 +11,8 @@
 		{.reg_addr = 0x0306, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0320, .reg_data = 0x02, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0323, .reg_data = 0x04, .delay = 0x00, .data_mask = 0xff}, \
+		{.reg_addr = 0x0324, .reg_data = 0x01, .delay = 0x00, .data_mask = 0xff}, \
+		{.reg_addr = 0x0325, .reg_data = 0xc2, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0326, .reg_data = 0xd8, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0327, .reg_data = 0x0b, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x0329, .reg_data = 0x01, .delay = 0x00, .data_mask = 0xff}, \
@@ -164,14 +166,16 @@
 		{.reg_addr = 0x4641, .reg_data = 0x04, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4643, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4645, .reg_data = 0x03, .delay = 0x00, .data_mask = 0xff}, \
+		{.reg_addr = 0x4800, .reg_data = 0x64, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4806, .reg_data = 0x40, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x480e, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4815, .reg_data = 0x2b, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x481b, .reg_data = 0x3c, .delay = 0x00, .data_mask = 0xff}, \
+		{.reg_addr = 0x481f, .reg_data = 0x42, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4833, .reg_data = 0x18, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4837, .reg_data = 0x08, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x484b, .reg_data = 0x07, .delay = 0x00, .data_mask = 0xff}, \
-		{.reg_addr = 0x4850, .reg_data = 0x41, .delay = 0x00, .data_mask = 0xff}, \
+		{.reg_addr = 0x4850, .reg_data = 0x40, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4860, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4861, .reg_data = 0xec, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x4864, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
@@ -556,7 +560,7 @@
 		{.reg_addr = 0x5d4a, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
 		{.reg_addr = 0x5d4c, .reg_data = 0x00, .delay = 0x00, .data_mask = 0xff}, \
 	},
-	.size = 553,
+	.size = 557,
 	.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD,
 	.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE,
 	.delay = 1,

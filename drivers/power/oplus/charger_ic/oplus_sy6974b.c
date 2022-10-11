@@ -36,7 +36,6 @@
 #include "oplus_sy6974b.h"
 
 extern bool oplus_get_otg_online_status_default(void);
-extern struct oplus_chg_chip *g_charger_chip;
 extern bool oplus_pd_without_usb(void);
 extern bool oplus_pd_connected(void);
 extern void oplus_notify_device_mode(bool enable);
@@ -63,6 +62,8 @@ struct chip_sy6974b {
 	int			reg_access;
 	int			before_suspend_icl;
 	int			before_unsuspend_icl;
+	int			normal_init_delay_ms;
+	int			other_init_delay_ms;
 
 	struct wakeup_source *suspend_ws;
 	/*fix chgtype identify error*/
@@ -84,6 +85,8 @@ static int aicl_result = 500;
 
 #define OPLUS_BC12_RETRY_CNT 1
 #define OPLUS_BC12_DELAY_CNT 18
+#define INIT_WORK_NORMAL_DELAY 1500
+#define INIT_WORK_OTHER_DELAY 1000
 
 static bool dumpreg_by_irq = 0;
 static int sy6974b_debug = 0;
@@ -855,16 +858,31 @@ bool sy6974b_get_power_gd(void)
 
 bool oplus_chg_is_usb_present(void)
 {
+	static bool pre_vbus_status = false;
+	struct chip_sy6974b *chip = charger_ic;
+	struct oplus_chg_chip *g_oplus_chip = oplus_chg_get_chg_struct();
+
 	if (oplus_get_otg_online_status_default()) {
 		chg_err("otg,return false");
-		return false;
+		pre_vbus_status = false;
+		return pre_vbus_status;
 	}
 
 	if (oplus_voocphy_get_fastchg_commu_ing()) {
 		/*chg_err("fastchg_commu_ing,return true");*/
-		return true;
+		pre_vbus_status = true;
+		return pre_vbus_status;
 	}
-	return sy6974b_get_bus_gd();
+
+	if (chip && atomic_read(&chip->driver_suspended) == 1
+	    && g_oplus_chip && g_oplus_chip->unwakelock_chg == 1
+	    && g_oplus_chip->charger_type != POWER_SUPPLY_TYPE_UNKNOWN) {
+		chg_err("unwakelock_chg=1, use pre status=%d\n", pre_vbus_status);
+		return pre_vbus_status;
+	}
+
+	pre_vbus_status = sy6974b_get_bus_gd();
+	return pre_vbus_status;
 }
 
 int sy6974b_charging_current_write_fast(int chg_cur)
@@ -1043,6 +1061,7 @@ int sy6974b_enable_charging(void)
 {
 	int rc;
 	struct chip_sy6974b *chip = charger_ic;
+	struct oplus_chg_chip *g_oplus_chip = oplus_chg_get_chg_struct();
 
 	if (!chip)
 		return 0;
@@ -1051,7 +1070,8 @@ int sy6974b_enable_charging(void)
 		return 0;
 	}
 
-	sy6974b_otg_disable();
+	if (!g_oplus_chip || !g_oplus_chip->otg_online)
+		sy6974b_otg_disable();
 	rc = sy6974b_config_interface(chip, REG01_SY6974B_ADDRESS,
 					REG01_SY6974B_CHARGING_ENABLE,
 					REG01_SY6974B_CHARGING_MASK);
@@ -1067,6 +1087,7 @@ int sy6974b_disable_charging(void)
 {
 	int rc;
 	struct chip_sy6974b *chip = charger_ic;
+	struct oplus_chg_chip *g_oplus_chip = oplus_chg_get_chg_struct();
 
 	if (!chip)
 		return 0;
@@ -1075,7 +1096,8 @@ int sy6974b_disable_charging(void)
 		return 0;
 	}
 
-	sy6974b_otg_disable();
+	if (!g_oplus_chip || !g_oplus_chip->otg_online)
+		sy6974b_otg_disable();
 	rc = sy6974b_config_interface(chip, REG01_SY6974B_ADDRESS,
 					REG01_SY6974B_CHARGING_DISABLE,
 					REG01_SY6974B_CHARGING_MASK);
@@ -1199,6 +1221,7 @@ int sy6974b_unsuspend_charger(void)
 					if (g_oplus_chip->authenticate
 							&& g_oplus_chip->mmi_chg
 							&& !g_oplus_chip->balancing_bat_stop_chg
+							&& (g_oplus_chip->charging_state != CHARGING_STATUS_FAIL)
 							&& oplus_vooc_get_allow_reading()
 							&& !oplus_is_rf_ftm_mode()) {
 						sy6974b_enable_charging();
@@ -1798,13 +1821,14 @@ struct oplus_chg_operations  sy6974b_chg_ops = {
 	.input_current_write_without_aicl = sy6974b_input_current_limit_without_aicl,
 	.oplus_chg_wdt_enable = sy6974b_wdt_enable,
 	.get_usbtemp_volt = oplus_get_usbtemp_volt,
-	.set_typec_sinkonly = sgm7220_set_typec_sinkonly,
-	.set_typec_cc_open = sgm7220_set_typec_cc_open,
+	.set_typec_sinkonly = oplus_set_typec_sinkonly,
+	.set_typec_cc_open = oplus_set_typec_cc_open,
 	.really_suspend_charger = sy6974b_really_suspend_charger,
 	.oplus_usbtemp_monitor_condition = oplus_usbtemp_condition,
 	.vooc_timeout_callback = sy6974b_vooc_timeout_callback,
 	.force_pd_to_dcp = sy6974b_force_pd_to_dcp,
 	.get_otg_enable = sy6974b_get_otg_enable,
+	.get_subboard_temp = oplus_get_subboard_temp,
 };
 
 static int sy6974b_parse_dt(struct chip_sy6974b *chip)
@@ -1828,6 +1852,14 @@ static int sy6974b_parse_dt(struct chip_sy6974b *chip)
 	chg_err("sy6974b-irq-gpio[%d]\n", chip->sy6974b_irq_gpio);
 
 	chip->batfet_reset_disable = of_property_read_bool(chip->client->dev.of_node, "qcom,batfet_reset_disable");
+
+	if (of_property_read_u32(chip->client->dev.of_node, "normal-init-work-delay-ms", &chip->normal_init_delay_ms))
+		chip->normal_init_delay_ms = INIT_WORK_NORMAL_DELAY;
+
+	if (of_property_read_u32(chip->client->dev.of_node, "other-init-work-delay-ms", &chip->other_init_delay_ms))
+		chip->other_init_delay_ms = INIT_WORK_OTHER_DELAY;
+
+	chg_err("init work delay [%d %d]\n", chip->normal_init_delay_ms, chip->other_init_delay_ms);
 
 	return ret;
 }
@@ -2132,6 +2164,9 @@ static irqreturn_t sy6974b_irq_handler(int irq, void *data)
 		oplus_voocphy_set_adc_enable(true);
 		sy6974b_set_wdt_timer(REG05_SY6974B_WATCHDOG_TIMER_40S);
 		oplus_wake_up_usbtemp_thread();
+		if (chip->oplus_charger_type == POWER_SUPPLY_TYPE_UNKNOWN) {
+			sy6974b_get_bc12(chip);
+		}
 		if (g_oplus_chip) {
 			if (oplus_vooc_get_fastchg_to_normal() == false
 					&& oplus_vooc_get_fastchg_to_warm() == false) {
@@ -2246,9 +2281,6 @@ static void sy6974b_init_work_handler(struct work_struct *work)
 	return;
 }
 
-#define INIT_WORK_NORMAL_DELAY 1500
-#define INIT_WORK_OTHER_DELAY 1000
-
 static int sy6974b_charger_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
 {
@@ -2330,14 +2362,15 @@ static int sy6974b_charger_probe(struct i2c_client *client,
 #else
 	if (MSM_BOOT_MODE__NORMAL == get_boot_mode())
 #endif
-		schedule_delayed_work(&chip->init_work, msecs_to_jiffies(INIT_WORK_NORMAL_DELAY));
+		schedule_delayed_work(&chip->init_work, msecs_to_jiffies(chip->normal_init_delay_ms));
 	else
-		schedule_delayed_work(&chip->init_work, msecs_to_jiffies(INIT_WORK_OTHER_DELAY));
+		schedule_delayed_work(&chip->init_work, msecs_to_jiffies(chip->other_init_delay_ms));
 
 	if (oplus_daily_build()
 			|| get_eng_version() == HIGH_TEMP_AGING
 			|| get_eng_version() == AGING)
 		sy6974b_debug |= ENABLE_DUMP_LOG;
+	sy6974b_irq_handler(0,chip);
 	return 0;
 
 err_irq:

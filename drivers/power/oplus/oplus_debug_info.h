@@ -69,6 +69,86 @@ struct wireless_chg_debug_info {
 	int wpc_chg_err;
 };/*add for wireless chg*/
 
+struct wireless_pen_status {
+	bool support;
+	u64 ble_timeout_cnt;
+	u64 verify_failed_cnt;
+};/*add for wireless pen*/
+
+struct oplus_chg_debug_info {
+	int initialized;
+
+	int pre_soc;
+	int cur_soc;
+	int pre_ui_soc;
+	int cur_ui_soc;
+	int soc_load_flag;
+	unsigned long sleep_tm_sec;
+	int soc_notified_flag;
+#define SOC_LOAD_DELAY (60 * 1000)
+	struct delayed_work soc_load_dwork;
+	int fast_chg_type;
+	int real_charger_type;
+	int pre_prop_status;
+	int chg_start_ui_soc;
+	int chg_start_temp;
+	int chg_start_time;
+	int chg_start_batt_volt;
+	int chg_end_soc;
+	int chg_end_temp;
+	int chg_end_time;
+	int chg_end_batt_volt;
+	int chg_total_time;
+	int total_time;
+	int total_time_count;
+
+	int pre_led_state;
+	int led_off_start_time;
+
+	int chg_cnt[OPLUS_NOTIFY_CHG_MAX_CNT];
+
+	int notify_type;
+	unsigned long long notify_flag;
+	struct mutex nflag_lock;
+
+	struct power_supply *usb_psy;
+	struct power_supply *batt_psy;
+
+	int fastchg_stop_cnt;
+	int cool_down_by_user;
+	int chg_current_by_tbatt;
+	int chg_current_by_cooldown;
+	int fastchg_input_current;
+
+	struct vooc_charge_strategy *vooc_charge_strategy;
+	int vooc_charge_input_current_index;
+	int vooc_charge_cur_state_chg_time;
+
+	int vooc_max_input_volt;
+	int vooc_max_input_current;
+	int fcc_design;
+	int chg_full_notified_flag;
+	int rechg_counts;/*add for rechg counts*/
+	struct workqueue_struct *oplus_chg_debug_wq;
+#ifdef CONFIG_OPLUS_FEATURE_FEEDBACK
+	struct kernel_packet_info *dcs_info;
+	struct mutex dcs_info_lock;
+#define SEND_INFO_DELAY 3000
+	struct delayed_work send_info_dwork;
+#define SEND_INFO_MAX_CNT 5
+	int retry_cnt;
+#endif
+	char flag_reason[32];
+	char type_reason[32];
+	int vooc_mcu_error;
+	bool report_soh;
+	int batt_soh;
+	int batt_cc;
+	struct wireless_chg_debug_info wireless_info;/*add for wireless chg*/
+	struct wireless_pen_status wirelesspen_info;/*add for wireless pen*/
+};
+
+
 enum GAUGE_SEAL_UNSEAL_ERROR{
 	OPLUS_GAUGE_SEAL_FAIL,
 	OPLUS_GAUGE_UNSEAL_FAIL,

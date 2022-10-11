@@ -4,3 +4,5 @@
 source "net/oplus_modules/oplus_dns_hook/Kconfig"
 
 source "net/oplus_modules/oplus_stats_calc/Kconfig"
+
+source "net/oplus_modules/oplus_qr_scan/Kconfig"

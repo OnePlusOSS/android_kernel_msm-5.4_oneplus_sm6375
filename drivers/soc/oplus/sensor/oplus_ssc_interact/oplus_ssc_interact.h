@@ -62,6 +62,13 @@ struct ssc_interactive{
 	wait_queue_head_t wq;
 	struct notifier_block nb;
 	struct dvb_coef  m_dvb_coef;
+#if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY)
+	bool notify_work_regiseted;
+	uint8_t notify_work_retry;
+	void *notifier_cookie;
+	struct drm_panel *active_panel;
+	struct delayed_work regiseter_lcd_notify_work;
+#endif
 };
 
 #endif /* __OPLUS_SSC_INTERACTIVE_H__ */

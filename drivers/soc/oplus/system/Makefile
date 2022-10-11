@@ -50,3 +50,7 @@ obj-$(CONFIG_SECURITY_SELINUX) += selinux/
 #ifdef OPLUS_FEATURE_MISC
 obj-y += misc/
 #endif /* OPLUS_FEATURE_MISC */
+#ifdef OPLUS_FEATURE_MDMFEATURE
+# add for mdm feature
+obj-$(CONFIG_OPLUS_FEATURE_MDMFEATURE)     += mdmfeature/
+#endif /*OPLUS_FEATURE_MDMFEATURE*/

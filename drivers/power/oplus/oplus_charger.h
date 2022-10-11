@@ -223,7 +223,8 @@ typedef enum {
 	CHG_STOP_VOTER__VBAT_TOO_HIGH		=	(1 << 2),
 	CHG_STOP_VOTER__MAX_CHGING_TIME		=	(1 << 3),
 	CHG_STOP_VOTER__FULL				=	(1 << 4),
-} OPLUS_CHG_STOP_VOTER;
+	CHG_STOP_VOTER__VBAT_OVP			=	(1 << 5),
+}OPLUS_CHG_STOP_VOTER;
 
 typedef enum {
 	CHARGER_STATUS__GOOD,
@@ -282,7 +283,8 @@ typedef enum {
 	CRITICAL_LOG_VOOC_BAD_CONNECTED,
 	CRITICAL_LOG_VOOC_BTB,
 	CRITICAL_LOG_VOOC_FW_UPDATE_ERR,
-} OPLUS_CHG_CRITICAL_LOG;
+	CRITICAL_LOG_VBAT_OVP,
+}OPLUS_CHG_CRITICAL_LOG;
 
 typedef enum {
 	CHARGING_STATUS_CCCV = 0X01,
@@ -495,6 +497,7 @@ struct oplus_chg_limits {
 	int vbatt_pdqc_to_5v_thr;
 	int vbatt_pdqc_to_9v_thr;
 	int tbatt_pdqc_to_5v_thr;
+	int tbatt_pdqc_to_9v_thr;
 	int ff1_normal_fastchg_ma;
 	int ff1_warm_fastchg_ma;
 	int ff1_exit_step_ma;				/*<=35C,700ma*/
@@ -813,6 +816,7 @@ struct oplus_chg_chip {
 	bool ffc_support;
 	bool dual_ffc;
 	int voocphy_support;
+	bool voocphy_support_display_vooc;
 	bool fg_info_package_read_support;
 	bool new_ui_warning_support;
 	bool fastchg_to_ffc;
@@ -1006,10 +1010,10 @@ struct oplus_chg_operations {
 	void (*force_pd_to_dcp)(void);
 	bool (*get_otg_enable)(void);
 	bool (*check_qchv_condition)(void);
+	int (*get_subboard_temp)(void);
 };
 
-int __attribute__((weak)) ppm_sys_boost_min_cpu_freq_set(int freq_min,
-		int freq_mid, int freq_max, unsigned int clear_time)
+int __attribute__((weak)) ppm_sys_boost_min_cpu_freq_set(int freq_min, int freq_mid, int freq_max, unsigned int clear_time)
 {
 	return 0;
 }
@@ -1104,8 +1108,7 @@ int oplus_chg_get_charger_current(void);
 #endif
 int oplus_chg_update_voltage(void);
 
-void oplus_chg_voter_charging_stop(struct oplus_chg_chip *chip,
-				   OPLUS_CHG_STOP_VOTER voter);
+void oplus_chg_voter_charging_stop(struct oplus_chg_chip *chip, OPLUS_CHG_STOP_VOTER voter);
 void oplus_chg_set_chargerid_switch_val(int value);
 void oplus_chg_turn_on_charging(struct oplus_chg_chip *chip);
 void oplus_chg_turn_on_charging_in_work(void);

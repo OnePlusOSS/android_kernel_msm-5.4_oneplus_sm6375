@@ -50,6 +50,11 @@
 #define NETLINK_OPLUS_KERNEL2USER  37      /* kernel data info to user space */
 //#endif /* OPLUS_FEATURE_DATA_EVAL */
 
+/* #ifdef OPLUS_FEATURE_WIFI_CAPCENTER */
+/* Add for Oppo WIFI Cap Center */
+#define NETLINK_OPLUS_WIFI_CAP_CENTER_SYNC 39
+#define NETLINK_OPLUS_WIFI_CAP_CENTER_ASYNC 40
+
 /* #ifdef OPLUS_FEATURE_THEIA */
 /* should match with oplus_theia/include/TheiaKeventThread.h define */
 #define OPLUS_NETLINK_THEIA_KEVENT 43

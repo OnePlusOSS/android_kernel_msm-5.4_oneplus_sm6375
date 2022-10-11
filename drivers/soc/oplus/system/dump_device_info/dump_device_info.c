@@ -11,12 +11,14 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/delay.h>
-#include <linux/pstore.h>
 #include <soc/qcom/socinfo.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/version.h>
+#include <linux/vmalloc.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 #include <linux/pstore_ram.h>
+#else
+#include <linux/pstore.h>
 #endif
 #include <linux/notifier.h>
 #include "../../../fs/pstore/internal.h"
@@ -33,10 +35,10 @@ static char pcb_version[8];
 static char rf_version[8];
 
 #define BUILD_PROP  "/my_product/build.prop"
+#define VERSION_LENGTH 64
 char build_version_key[24] = "ro.build.version.ota=";
-char build_version[64];
+char build_version[VERSION_LENGTH];
 
-static char buf[8192] = {'\0'};
 
 
 #define GET_VERSION_INFO_TIMEOUT_MS     150000
@@ -92,19 +94,20 @@ static int __init device_info_init(void)
 	return 1;
 }
 
-/*device info init to black */
-static void  pstore_device_info_init(void)
+/*device info init to black*/
+static int pstore_device_info_init(void)
 {
 	size_t oldsize;
 	size_t size = 0;
 
-	struct ramoops_context *cxt = psinfo->data;
-	struct pstore_record record;
+        struct ramoops_context *cxt;
+        struct pstore_record record;
 
-	if (psinfo == NULL)
-		return;
+        if (psinfo == NULL)
+                return -1;
 
-	size = cxt->device_info_size;
+        cxt = psinfo->data;
+        size = cxt->device_info_size;
 
 	pstore_record_init(&record, psinfo);
 	record.type = PSTORE_TYPE_DEVICE_INFO;
@@ -120,6 +123,7 @@ static void  pstore_device_info_init(void)
 	psinfo->write(&record);
 
 	psinfo->bufsize = oldsize;
+	return 0;
 }
 
 static void pstore_write_device_info(const char *s, unsigned int c)
@@ -166,9 +170,10 @@ static void get_version_info_handle(struct work_struct *work)
 	struct file *fp;
 	int i = 0;
 	ssize_t len = 0;
-	char *substr;
-	int old_fs;
-	loff_t pos;
+	char *substr, *buf;
+	int old_fs = 0;
+	loff_t pos, i_size;
+	loff_t max_size = 24*1024;
 	printk("[get_version_info_handle]\n");
 	fp = filp_open(BUILD_PROP, O_RDONLY, 0600);
 	if (IS_ERR(fp)) {
@@ -176,11 +181,26 @@ static void get_version_info_handle(struct work_struct *work)
 		goto out;
 	}
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
+        i_size = i_size_read(file_inode(fp));
+        if (i_size <= 0) {
+                pr_info("read  %s file size fail \n", BUILD_PROP);
+                goto out;
+        }
+        if (i_size > max_size) {
+                pr_info("%s file i_size %lld is greate than max_size %lld \n", BUILD_PROP, i_size, max_size);
+                goto out;
+        }
+        buf = vzalloc(i_size + 1);
+        if (!buf) {
+                pr_info("%s file isize %lld vmalloc fail \n", BUILD_PROP, i_size);
+                goto out;
+        }
+
+        old_fs = get_fs();
+        set_fs(KERNEL_DS);
 
 	pos = 0;
-	len = vfs_read(fp, buf, sizeof(buf), &pos);
+        len = vfs_read(fp, buf, i_size, &pos);
 	if (len < 0) {
 		pr_info("read %s file error\n", BUILD_PROP);
 	}
@@ -190,20 +210,22 @@ static void get_version_info_handle(struct work_struct *work)
 	pr_info("build_version:-%s--\n", substr);
 
 	if (substr != NULL) {
-		while(*substr != '\n') {
+	        while ((*substr != '\n') && (*substr != 0)) {
 			if (*substr == '=')
 				break;
 			substr++;
 		}
-
-		while (*(++substr) != '\n') {
+		if (*substr == '=') {
+			while ((*(++substr) != '\n') && (i < VERSION_LENGTH)) {
 			build_version[i] = *(substr);
 			i++;
+        		}
 		}
 	}
 
 	pr_info("build_version_value:%s--\n", build_version);
 	write_device_info("software version", build_version);
+        vfree(buf);
 
 out:
 	if (IS_ERR(fp)) {
@@ -216,8 +238,12 @@ out:
 
 static int __init init_device_info(void)
 {
+	int ret = 0;
 	printk("pstore device info init");
-	pstore_device_info_init();
+	ret = pstore_device_info_init();
+	if (ret < 0) {
+		return ret;
+	}
 	board_hw_info_init();
 	device_info_init();
 
@@ -233,7 +259,7 @@ static int __init init_device_info(void)
 	INIT_DELAYED_WORK(&g_version_info.version_info_work, get_version_info_handle);
 	schedule_delayed_work(&g_version_info.version_info_work, msecs_to_jiffies(GET_VERSION_INFO_TIMEOUT_MS));
 
-	return 0;
+	return ret;
 }
 late_initcall(init_device_info);
 

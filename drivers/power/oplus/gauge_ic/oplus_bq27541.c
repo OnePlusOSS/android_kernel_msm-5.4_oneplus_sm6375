@@ -71,12 +71,10 @@ static oplus_gauge_auth_result auth_data;
 static bool get_smem_batt_info(oplus_gauge_auth_result *auth, int kk);
 static bool init_gauge_auth(oplus_gauge_auth_result *rst, struct bq27541_authenticate_data *authenticate_data);
 static int bq27411_write_soc_smooth_parameter(struct chip_bq27541 *chip, bool is_powerup);
-extern int get_subboard_ntc_temperature(void);
 
 #define GAUGE_READ_ERR	0x01
 #define GAUGE_WRITE_ERR 0x02
 static int gauge_i2c_err = 0;
-#define DEFAULT_BOART_TEMP 250
 
 #ifndef CONFIG_REMOVE_OPLUS_FUNCTION
 int __attribute__((weak)) register_device_proc(char *name, char *version, char *vendor)
@@ -94,12 +92,6 @@ void __attribute__((weak)) oplus_set_fg_device_type(int device_type)
 {
 	return;
 }
-
-int __attribute__((weak)) get_subboard_ntc_temperature(void)
-{
-	return DEFAULT_BOART_TEMP;
-}
-
 
 /**********************************************************
   *
@@ -1134,7 +1126,6 @@ static int bq28z610_get_battery_balancing_status(void)
 {
 	return batt_balancing_config;
 }
-#define ERROR_BATT_TEMP -400
 static int bq27541_get_battery_temperature(void)
 {
 	int ret = 0;
@@ -1150,14 +1141,6 @@ static int bq27541_get_battery_temperature(void)
 	if (!gauge_ic) {
 		return 0;
 	}
-	if(gauge_ic->use_subboard_temp) {
-		if(gauge_i2c_err != 0) {
-			return ERROR_BATT_TEMP;
-		}
-		temp = get_subboard_ntc_temperature();
-		return temp;
-	}
-
 	if (atomic_read(&gauge_ic->suspended) == 1) {
 		return gauge_ic->temp_pre + ZERO_DEGREE_CELSIUS_IN_TENTH_KELVIN;
 	}
@@ -2124,8 +2107,6 @@ static void bq27541_parse_dt(struct chip_bq27541 *chip)
 	chip->bq28z610_need_balancing = of_property_read_bool(node, "qcom,bq28z610_need_balancing");
 	chip->battery_full_param = of_property_read_bool(node, "qcom,battery-full-param");//only for wite battery full param in guage dirver probe on 7250 platform
 	rc = of_property_read_u32(node, "qcom,gauge_num", &chip->gauge_num);
-	chip->use_subboard_temp = of_property_read_bool(node, "qcom,use_subboard_temp");
-
 	if(rc) {
 		chip->gauge_num = 0;
 	}

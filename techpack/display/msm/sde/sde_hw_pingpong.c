@@ -382,11 +382,15 @@ static int sde_hw_pp_setup_dither(struct sde_hw_pingpong *pp,
 		SDE_REG_WRITE(c, base + offset, data);
 	}
 
+#ifndef OPLUS_BUG_STABILITY
 	if (test_bit(SDE_PINGPONG_DITHER_LUMA, &pp->caps->features)
 				&& (dither->flags & DITHER_LUMA_MODE))
 		SDE_REG_WRITE(c, base, 0x11);
 	else
 		SDE_REG_WRITE(c, base, 1);
+#else
+	SDE_REG_WRITE(c, base, 0x11);
+#endif
 
 	return 0;
 }

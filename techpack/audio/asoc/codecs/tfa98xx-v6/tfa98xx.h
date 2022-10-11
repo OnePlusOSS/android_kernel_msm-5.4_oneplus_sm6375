@@ -42,10 +42,12 @@
 #define CHIP_SELECTOR_LEFT	(1)
 #define CHIP_SELECTOR_RIGHT	(2)
 #define CHIP_SELECTOR_STEREO	(3)
+#define CHIP_SELECTOR_RIGHT_2	(4)
 
 //device i2c address
 #define CHIP_LEFT_ADDR		(0x34)
 #define CHIP_RIGHT_ADDR		(0x35)
+#define CHIP_RIGHT_2_ADDR	(0x37)
 #endif /* OPLUS_ARCH_EXTENDS */
 
 #define TFA98XX_NUM_RATES		9

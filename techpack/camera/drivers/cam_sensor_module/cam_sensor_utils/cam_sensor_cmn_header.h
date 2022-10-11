@@ -151,12 +151,6 @@ enum msm_camera_power_seq_type {
 	SENSOR_EXT_L5,
 	SENSOR_EXT_L6,
 	SENSOR_EXT_L7,
-#endif
-	#ifdef CONFIG_CAMERA_EXTLDO_WL2868C
-	SENSOR_WL2868C_VANA,
-	SENSOR_WL2868C_VDIG,
-	SENSOR_WL2868C_VIO,
-	SENSOR_WL2868C_VAF,
 	#endif
 	SENSOR_SEQ_TYPE_MAX,
 };
@@ -342,6 +336,9 @@ struct cam_camera_slave_info {
 	uint16_t sensor_id_reg_addr;
 	uint16_t sensor_id;
 	uint16_t sensor_id_mask;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint16_t flash_id;
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 };
 
 struct msm_sensor_init_params {
@@ -410,12 +407,6 @@ enum msm_camera_vreg_name_t {
 	CAM_VAF,
 	CAM_V_CUSTOM1,
 	CAM_V_CUSTOM2,
-	#ifdef CONFIG_CAMERA_EXTLDO_WL2868C
-	CAM_WL2868C_VDIG,
-	CAM_WL2868C_VIO,
-	CAM_WL2868C_VANA,
-	CAM_WL2868C_VAF,
-	#endif
 	CAM_VREG_MAX,
 };
 

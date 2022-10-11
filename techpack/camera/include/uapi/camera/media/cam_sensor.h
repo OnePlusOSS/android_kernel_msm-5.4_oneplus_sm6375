@@ -174,6 +174,9 @@ struct cam_cmd_probe {
 	__u32    data_mask;
 	__u16    camera_id;
 	__u16    reserved;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	__u16     flash_id;
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 } __attribute__((packed));
 
 /**

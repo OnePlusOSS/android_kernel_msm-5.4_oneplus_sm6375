@@ -103,7 +103,7 @@ int oplus_display_panel_get_id(void *buf)
 		return -EINVAL;
 	}
 
-	return ret;
+	return 0;
 }
 
 int oplus_display_panel_get_max_brightness(void *buf)

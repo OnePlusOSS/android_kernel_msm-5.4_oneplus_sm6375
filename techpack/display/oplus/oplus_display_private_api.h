@@ -40,8 +40,8 @@
 
 
 #ifdef OPLUS_FEATURE_AOD_RAMLESS
+#define RAMLESS_AOD_AREA_NUM		6
 struct aod_area {
-	int enable;
 	int x;
 	int y;
 	int w;
@@ -51,6 +51,12 @@ struct aod_area {
 	int mono;
 	int gray;
 };
+
+struct aod_area_para {
+	struct aod_area panel_aod_area[RAMLESS_AOD_AREA_NUM];
+	int size;
+};
+
 int oplus_display_panel_set_aod_area(void *buf);
 
 int oplus_display_panel_get_aod_area(void *buf);
@@ -85,8 +91,6 @@ int dsi_display_oplus_set_power(struct drm_connector *connector, int power_mode,
 
 void lcdinfo_notify(unsigned long val, void *v);
 
-int oplus_display_set_failsafe(void *buf);
-int oplus_display_get_failsafe(void *buf);
 int dsi_panel_switch_gamma_mode(struct dsi_panel *panel, u32 bl_lvl);
 
 #endif /* _OPLUS_DISPLAY_PRIVATE_API_H_ */

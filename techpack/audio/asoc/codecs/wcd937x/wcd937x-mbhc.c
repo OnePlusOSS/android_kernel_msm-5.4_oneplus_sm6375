@@ -20,6 +20,19 @@
 #include <asoc/wcd-mbhc-v2-api.h>
 #include "internal.h"
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* Add for audio kernel feedback */
+#include "feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err
+#undef dev_err
+#define dev_err dev_err_fb
+#endif
+#ifdef pr_err
+#undef pr_err
+#define pr_err pr_err_fb
+#endif
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
 #define WCD937X_ZDET_SUPPORTED          true
 /* Z value defined in milliohm */
 #define WCD937X_ZDET_VAL_32             32000
@@ -1141,7 +1154,7 @@ int wcd937x_mbhc_init(struct wcd937x_mbhc **mbhc,
 		dev_info(component->dev, "%s: oplus,mbhc_enable_hp_impedance_detect DT property not found\n",
 			__func__);
 	}
-	dev_err(component->dev, "%s:wcd_mbhc->enable_hp_impedance_detect(%d)\n",__func__, wcd_mbhc->enable_hp_impedance_detect);
+	dev_info(component->dev, "%s:wcd_mbhc->enable_hp_impedance_detect(%d)\n",__func__, wcd_mbhc->enable_hp_impedance_detect);
 	#endif /* OPLUS_ARCH_EXTENDS */
 
 	#ifdef OPLUS_ARCH_EXTENDS

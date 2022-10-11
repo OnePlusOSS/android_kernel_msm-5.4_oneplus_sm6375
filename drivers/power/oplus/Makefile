@@ -24,6 +24,7 @@ oplus_chg-y += oplus_pps.o
 oplus_chg-y += adapter_ic/oplus_stm.o
 oplus_chg-y += charger_ic/oplus_short_ic.o
 oplus_chg-y += gauge_ic/oplus_bq27541.o
+oplus_chg-y += gauge_ic/oplus_sm5602.o
 oplus_chg-y += vooc_ic/oplus_stm8s.o
 oplus_chg-y += vooc_ic/oplus_n76e.o
 oplus_chg-y += vooc_ic/oplus_rk826.o
@@ -36,6 +37,7 @@ oplus_chg-y += charger_ic/s2asl01_switching.o
 oplus_chg-y += charger_ic/oplus_switching.o
 ifneq ($(CONFIG_OPLUS_CHARGER_MTK),y)
 oplus_chg-y += wireless_ic/oplus_p922x.o
+oplus_chg-y += wireless_ic/oplus_ra9530.o
 oplus_chg-y += wireless_ic/oplus_nu1619.o
 oplus_chg-y += wireless_ic/oplus_chargepump.o
 endif
@@ -53,6 +55,7 @@ oplus_chg-$(CONFIG_OPLUS_SM6375R_CHARGER) += \
 		charger_ic/oplus_sgm7220.o \
 		charger_ic/oplus_sy6970.o \
 		charger_ic/oplus_sgm41511.o \
+		charger_ic/oplus_sgm41512.o \
 		charger_ic/oplus_discrete_charger.o \
 		charger_ic/oplus_mp2650.o \
 		charger_ic/oplus_usbtemp.o \

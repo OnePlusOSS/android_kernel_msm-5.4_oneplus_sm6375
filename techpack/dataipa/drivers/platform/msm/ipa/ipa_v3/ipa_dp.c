@@ -2043,16 +2043,24 @@ fail_kmem_cache_alloc:
 }
 
 static struct page *ipa3_alloc_page(
-	gfp_t flag, u32 *page_order, bool try_lower)
+	gfp_t flag, u32 *page_order, bool try_lower, bool is_tmp_alloc)
 {
 	struct page *page = NULL;
 	u32 p_order = *page_order;
+
+	/* For temporary allocations, avoid triggering OOM Killer. */
+	if (is_tmp_alloc) {
+		flag |= __GFP_RETRY_MAYFAIL | __GFP_NOWARN;
+	}
 
 	page = __dev_alloc_pages(flag, p_order);
 	/* We will only try 1 page order lower. */
 	if (unlikely(!page)) {
 		if (try_lower && p_order > 0) {
 			p_order = p_order - 1;
+			if (p_order < IPA_WAN_PAGE_ORDER) {
+				flag &= ~(__GFP_RETRY_MAYFAIL | __GFP_NOWARN);
+			}
 			page = __dev_alloc_pages(flag, p_order);
 			if (likely(page))
 				ipa3_ctx->stats.lower_order++;
@@ -2078,7 +2086,7 @@ static struct ipa3_rx_pkt_wrapper *ipa3_alloc_rx_pkt_page(
 	/* Try a lower order page for order 3 pages in case allocation fails. */
 	rx_pkt->page_data.page = ipa3_alloc_page(flag,
 				&rx_pkt->page_data.page_order,
-				(is_tmp_alloc && rx_pkt->page_data.page_order == 3));
+				(is_tmp_alloc && rx_pkt->page_data.page_order == IPA_WAN_PAGE_ORDER), is_tmp_alloc);
 
 	if (unlikely(!rx_pkt->page_data.page))
 		goto fail_page_alloc;

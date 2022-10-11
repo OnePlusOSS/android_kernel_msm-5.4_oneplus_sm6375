@@ -110,7 +110,7 @@ static int ilitek_black_test_item(struct black_gesture_test *p,
 
 	if (!com_test_data_p || !com_test_data_p->chip_test_ops) {
 		if (p->message_size >= 30) {
-			snprintf(p->message, 30, "%d errors. %s", "com_test_data is null.");
+			snprintf(p->message, 30, "%d errors. %s", error_count, "com_test_data is null.");
 		}
 
 		TPD_INFO("%s: com_test_data is null\n", __func__);

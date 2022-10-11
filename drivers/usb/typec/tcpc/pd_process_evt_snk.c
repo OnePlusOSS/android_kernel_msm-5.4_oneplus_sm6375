@@ -416,6 +416,13 @@ static inline bool pd_process_timer_msg(
 			PE_TRANSIT_STATE(pd_port, PE_SNK_HARD_RESET);
 			return true;
 		}
+		/* add for PISEN adapter, when we sent hard reset, vbus don't drop sometime. We retry again */
+		if ((pd_port->pe_state_curr == PE_SNK_DISCOVERY) &&
+					(pe_data->retry_cnt < PD_HARD_RESET_RETRY_COUNT)) {
+			pe_data->retry_cnt++;
+			PE_TRANSIT_STATE(pd_port, PE_SNK_HARD_RESET);
+			return true;
+		}
 
 		PE_INFO("SRC NoResp\n");
 		if (pd_port->request_v == TCPC_VBUS_SINK_5V) {

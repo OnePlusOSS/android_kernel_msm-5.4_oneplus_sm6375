@@ -100,9 +100,6 @@ static const struct panel_ioctl_desc panel_ioctls[] = {
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_VIDEO, oplus_display_panel_set_video),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_VIDEO, oplus_display_panel_get_video),
 #endif /* OPLUS_FEATURE_AOD_RAMLESS */
-
-	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_FAILSAFE, oplus_display_set_failsafe),
-	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_FAILSAFE, oplus_display_get_failsafe),
 };
 
 int oplus_display_fix_apollo_level(void)
@@ -305,11 +302,20 @@ static int panel_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+extern ssize_t oplus_sde_evtlog_dump_read(struct file *file, char __user *buff,
+		size_t count, loff_t *ppos);
 static ssize_t panel_read(struct file *filp, char __user *buffer,
 			  size_t count, loff_t *offset)
 {
-	pr_err("%s\n", __func__);
-	return 0;
+	ssize_t lens = 0;
+
+	lens += oplus_sde_evtlog_dump_read(filp, buffer, count, offset);
+	if (lens < 0) {
+		lens = 0;
+	}
+	/*other dump add here, as for lens add*/
+
+	return lens;
 }
 
 static ssize_t panel_write(struct file *file, const char __user *buffer,

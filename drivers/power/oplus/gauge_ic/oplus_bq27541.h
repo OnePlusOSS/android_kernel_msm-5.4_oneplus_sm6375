@@ -419,9 +419,8 @@ struct chip_bq27541 {
 
 	bool modify_soc_smooth;
 	bool modify_soc_calibration;
-	bool use_subboard_temp;
 
-	bool battery_full_param; /*only for wite battery full param in guage dirver probe on 7250 platform */
+	bool battery_full_param; /* only for wite battery full param in guage dirver probe on 7250 platform */
 	int sha1_key_index;
 	bool batt_bq28z610;
 	bool batt_zy0603;

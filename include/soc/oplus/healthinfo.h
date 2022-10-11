@@ -49,6 +49,15 @@ enum {
         OHM_TYPE_TOTAL
 };
 
+#ifdef CONFIG_OPLUS_BINDER_STRATEGY
+struct ob_struct{
+	struct binder_proc *ob_proc;
+	struct list_head ob_list;
+	u64 ob_check_ts;
+	bool init;
+};
+#endif
+
 struct sched_stat_common {
         u64 max_ms;
         u64 high_cnt;

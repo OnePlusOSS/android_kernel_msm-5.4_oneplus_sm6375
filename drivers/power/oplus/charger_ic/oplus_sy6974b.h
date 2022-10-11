@@ -256,6 +256,7 @@ extern int smbchg_get_chargerid_volt(void);
 extern bool oplus_chg_is_usb_present(void);
 extern int smbchg_get_boot_reason(void);
 extern int oplus_chg_get_shutdown_soc(void);
+extern int oplus_get_subboard_temp(void);
 extern int oplus_chg_backup_soc(int backup_soc);
 extern int oplus_chg_get_charger_subtype(void);
 extern int oplus_chg_set_pd_config(void);

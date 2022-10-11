@@ -908,6 +908,7 @@ void mrp_uninit_applicant(struct net_device *dev, struct mrp_application *appl)
 
 	spin_lock_bh(&app->lock);
 	mrp_mad_event(app, MRP_EVENT_TX);
+	mrp_attr_destroy_all(app);
 	mrp_pdu_queue(app);
 	spin_unlock_bh(&app->lock);
 

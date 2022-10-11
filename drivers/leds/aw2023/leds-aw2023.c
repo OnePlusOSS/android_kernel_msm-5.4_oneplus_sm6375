@@ -22,6 +22,8 @@
 #include <linux/regulator/consumer.h>
 #include "leds-aw2023.h"
 #include <soc/oplus/system/oplus_project.h>
+#include <linux/workqueue.h>
+#include "../../regulator/oplus_camera_wl2868c.h"
 
 #define AW2023_DRIVER_VERSION "V1.0.2"
 
@@ -94,7 +96,7 @@
 #define LED_MAX_NUM						3
 #define LED_BRIGHTNESS_MAX					15
 #define LED_SUPPORT_TYPE					"support"
-
+#define LED_ESD_WORK_TIME					3
 
 const unsigned char aw2023_reg_access[AW2023_REG_MAX] = {
 	[AW2023_REG_RESET]  = REG_RD_ACCESS|REG_WR_ACCESS,
@@ -128,6 +130,14 @@ enum AW2023_LED_MODE{
 	AW2023_LED_MAXMODE,
 };
 
+enum AW2023_LED_TYPE {
+	AW2023_LED_RED = 0,
+	AW2023_LED_GREEN,
+	AW2023_LED_BLUE,
+	AW2023_LED_ON,
+	AW2023_LED_OFF,
+};
+
 struct aw2023_led {
 	struct i2c_client *client;
 	struct led_classdev cdev;
@@ -139,11 +149,18 @@ struct aw2023_led {
 	int num_leds;
 	int id;
 	bool poweron;
+	bool esd_flag;
+	struct delayed_work   aw2023_led_work;
+	struct workqueue_struct *aw2023_led_wq;
 };
 
-extern int fan53870_cam_ldo_set_voltage(unsigned int LDO_NUM, int set_mv);
-extern int fan53870_cam_ldo_disable(int LDO_NUM);
-unsigned int aw2023_debug = 0;
+struct aw2023_led *led_default;
+extern int oplus_misc_healthinfo(int type, int para, int bright);
+extern int wl2868c_set_ldo_value(EXT_SELECT ldonum,unsigned int value);
+extern int wl2868c_set_en_ldo(EXT_SELECT ldonum,unsigned int en);
+// extern int fan53870_cam_ldo_set_voltage(unsigned int LDO_NUM, int set_mv);
+// extern int fan53870_cam_ldo_disable(int LDO_NUM);
+unsigned int aw2023_debug = 2;
 
 static int aw2023_write(struct aw2023_led *led, u8 reg, u8 val)
 {
@@ -181,54 +198,41 @@ static int aw2023_power_on(struct aw2023_led *led, bool on)
 	int rc = 0;
 
 	if (on) {
-		rc = fan53870_cam_ldo_set_voltage(5, 3300);
-		if (rc) {
-			dev_err(&led->client->dev,
-				"fan53870_cam_ldo_set_voltage failed rc=%d\n", rc);
-			return rc;
-		}
-
 		rc = regulator_enable(led->vcc);
 		if (rc) {
 			dev_err(&led->client->dev,
 				"Regulator vcc enable failed rc=%d\n", rc);
-			goto fail_enable_reg;
-		}
-		led->poweron = true;
-		msleep(AW_LED_POWER_ON_DELAY);
-	} else {
-		rc = fan53870_cam_ldo_disable(5);
-		if (rc) {
-			dev_err(&led->client->dev,
-				"fan53870_cam_ldo_set_voltage failed rc=%d\n", rc);
 			return rc;
 		}
 
+		rc = wl2868c_set_ldo_value(EXT_LDO5, 3300);
+		rc |= wl2868c_set_en_ldo(EXT_LDO5, 1);
+		if (rc) {
+			dev_err(&led->client->dev,
+				"cam_ldo_set_voltage enable failed rc=%d\n", rc);
+			return rc;
+		 }
+
+		led->poweron = true;
+		msleep(AW_LED_POWER_ON_DELAY);
+	} else {
 		rc = regulator_disable(led->vcc);
 		if (rc) {
 			dev_err(&led->client->dev,
 				"Regulator vcc disable failed rc=%d\n", rc);
-			goto fail_disable_reg;
+			return rc;
 		}
+
+		rc = wl2868c_set_en_ldo(EXT_LDO5, 0);
+		if (rc) {
+			dev_err(&led->client->dev,
+				"cam_ldo_set_voltage  disable failed rc=%d\n", rc);
+			return rc;
+		 }
+
 		led->poweron = false;
 		msleep(AW_LED_POWER_OFF_DELAY);
 	}
-	return rc;
-
-fail_enable_reg:
-	rc = fan53870_cam_ldo_disable(5);
-	if (rc)
-		dev_err(&led->client->dev,
-			"Regulator vdd disable failed rc=%d\n", rc);
-
-	return rc;
-
-fail_disable_reg:
-	rc = fan53870_cam_ldo_set_voltage(5, 3300);
-	if (rc)
-		dev_err(&led->client->dev,
-			"Regulator vdd enable failed rc=%d\n", rc);
-
 	return rc;
 }
 
@@ -318,15 +322,6 @@ static int aw2023_led_init_default(struct aw2023_led *led)
 		return ret;
 	}
 
-	/* aw2023 led sync mode enable*/
-	if(led->id == 0)
-		led->pdata->led_mode = AW2023_LED_SYNC_MODE_MASK;
-	ret = aw2023_write(led, AW2023_REG_LCFG0 + led->id, led->pdata->led_mode);
-	if (ret) {
-		dev_err(&led->client->dev, "AW2023_REG_LCFG0 error = %d\n",ret);
-		return ret;
-	}
-
 	/* aw2023 led pwm 255 */
 	ret = aw2023_write(led, AW2023_REG_PWM0 + led->id, AW2023_LED_PWM_MASK);
 	if (ret) {
@@ -348,14 +343,6 @@ static int aw2023_led_init_default(struct aw2023_led *led)
 		dev_err(&led->client->dev, "breath time tf1 & toff error = %d\n",ret);
 		return ret;
 	}
-
-	/* aw2023 led chanel enable*/
-	ret = aw2023_write(led, AW2023_REG_LEDEN + led->id, AW2023_LED_ENABLE_MASK);
-	if (ret) {
-		dev_err(&led->client->dev, "AW2023_REG_LCFG0 error = %d\n",ret);
-		return ret;
-	}
-
 	/* aw2023 chip disable */
 	ret = aw2023_write(led, AW2023_REG_GCR1, AW2023_CHIP_DISABLE_MASK);
 	if (ret) {
@@ -393,11 +380,9 @@ static int aw2023_led_change_mode(struct aw2023_led *led, enum AW2023_LED_MODE m
 	return ret;
 }
 
-static void aw2023_brightness_work(struct work_struct *work)
+static void aw2023_brightness(struct aw2023_led *led)
 {
-	struct aw2023_led *led = container_of(work, struct aw2023_led,
-					brightness_work);
-	u8 i=0, val=0, enable = 0;
+	u8 i=0, val=0, enable = 0, state = AW2023_LED_OFF;
 
 	mutex_lock(&led->pdata->led->lock);
 
@@ -420,41 +405,56 @@ static void aw2023_brightness_work(struct work_struct *work)
 		enable =0;
 	}
 
+	/*aw2023 led breath time*/
+	if(led->pdata->led_mode & AW2023_LED_BREATH_MODE_MASK) {
+		/* aw2023 led breath time tr1 & ton */
+		aw2023_write(led, AW2023_REG_LED0T0 + led->id*LED_MAX_NUM,
+			(led->pdata->rise_time_ms << AW2023_LED_TIME_SHIFT_MASK | led->pdata->hold_time_ms));
+		aw2023_write(led, AW2023_REG_LED0T1 + led->id*LED_MAX_NUM,
+			(led->pdata->fall_time_ms << AW2023_LED_TIME_SHIFT_MASK | led->pdata->off_time_ms));
+	}
+
 	/* aw2023 led mode & current */
 	if (led->cdev.brightness > 0) {
+		state = AW2023_LED_ON;
 		if (led->cdev.brightness > LED_BRIGHTNESS_MAX)
 			led->cdev.brightness = LED_BRIGHTNESS_MAX;
-
-		/*aw2023 led sync mode*/
-		if(led->id == 0)
-			led->pdata->led_mode |= AW2023_LED_SYNC_MODE_MASK;
-		aw2023_write(led, AW2023_REG_LCFG0 + led->id,(led->pdata->led_mode | led->cdev.brightness));
-
-		if(led->pdata->led_mode == AW2023_LED_BREATH_MODE_MASK) {
-			/* aw2023 led breath time tr1 & ton */
-			aw2023_write(led, AW2023_REG_LED0T0 + led->id*LED_MAX_NUM,
-				(led->pdata->rise_time_ms << AW2023_LED_TIME_SHIFT_MASK | led->pdata->hold_time_ms));
-			aw2023_write(led, AW2023_REG_LED0T1 + led->id*LED_MAX_NUM,
-				(led->pdata->fall_time_ms << AW2023_LED_TIME_SHIFT_MASK | led->pdata->off_time_ms));
-		}
-
-	} else {
-		aw2023_read(led, AW2023_REG_LCFG0 + led->id, &val);
-		aw2023_write(led, AW2023_REG_LCFG0 + led->id, val & (~AW2023_LED_CURRENT_MASK));
+		/* aw2023 led chanel enable*/
+		aw2023_write(led, AW2023_REG_LEDEN, AW2023_LED_ENABLE_MASK);
+		aw2023_write(led, AW2023_REG_PWM0 + led->id, AW2023_LED_PWM_MASK);
 	}
+	aw2023_write(led, AW2023_REG_LCFG0 + led->id,(led->pdata->led_mode | led->cdev.brightness));
+
+	/*aw2023 led sync mode*/
+	if(led->id == AW2023_LED_BLUE) {
+		aw2023_read(led, AW2023_REG_LCFG0 + i, &val);
+		if((led_default[AW2023_LED_RED].pdata->led_mode == led_default[AW2023_LED_GREEN].pdata->led_mode)
+			&& (led_default[AW2023_LED_RED].pdata->led_mode == led_default[AW2023_LED_BLUE].pdata->led_mode))
+			aw2023_write(led, AW2023_REG_LCFG0, AW2023_LED_SYNC_MODE_MASK | val);
+		else
+			aw2023_write(led, AW2023_REG_LCFG0, val & (~AW2023_LED_SYNC_MODE_MASK));
 
 	/*  all led disabled, set led chip disabled */
-	for(i=0;i<LED_MAX_NUM;i++) {
-		aw2023_read(led, AW2023_REG_LCFG0 + i, &val);
-		enable |= val & AW2023_LED_CURRENT_MASK;
+		for(i=0;i<LED_MAX_NUM;i++) {
+			aw2023_read(led, AW2023_REG_LCFG0 + i, &val);
+			enable |= val & AW2023_LED_CURRENT_MASK;
+		}
+		if(enable == 0) {
+			aw2023_write(led, AW2023_REG_GCR1, AW2023_CHIP_DISABLE_MASK);
+		}
 	}
-	if(enable == 0) {
-		aw2023_write(led, AW2023_REG_GCR1, AW2023_CHIP_DISABLE_MASK);
-	}
+
+	oplus_misc_healthinfo(led->id, state, led->cdev.brightness);
 	AW2023_DEBUG("%s:  brightness[%d]=%x led_mode[%d]=%x  enable=%d\n",__func__,led->id,led->cdev.brightness,led->id,led->pdata->led_mode,enable);
 	mutex_unlock(&led->pdata->led->lock);
 }
 
+static void aw2023_brightness_work(struct work_struct *work)
+{
+	struct aw2023_led *led = container_of(work, struct aw2023_led,
+					brightness_work);
+	aw2023_brightness(led);
+}
 
 static void aw2023_set_brightness(struct led_classdev *cdev,
 				enum led_brightness brightness)
@@ -482,7 +482,7 @@ static ssize_t aw2023_led_support_attr_show (struct device *dev,
 
 	prj_id = get_project();
 
-	return snprintf(buf, PAGE_SIZE, "%s-%d\n",LED_SUPPORT_TYPE,led->cdev.max_brightness);
+	return snprintf(buf, PAGE_SIZE, "%s-%u\n",LED_SUPPORT_TYPE,led->cdev.max_brightness);
 }
 
 static ssize_t aw2023_led_breath_on_attr_show (struct device *dev,
@@ -508,13 +508,10 @@ static ssize_t aw2023_led_breath_on_attr_store(struct device *dev,
 
 	mutex_lock(&led->pdata->led->lock);
 	led->pdata->rise_time_ms = data;
-	ret = aw2023_write(led, AW2023_REG_LED0T0 + led->id*3, (led->pdata->rise_time_ms << AW2023_LED_TIME_SHIFT_MASK  | led->pdata->hold_time_ms));
 	mutex_unlock(&led->pdata->led->lock);
 
 	AW2023_DEBUG("%s[%d]: rise_time_ms=%d (max:15)\n",__func__,led->id,led->pdata->rise_time_ms);
 
-	if (ret < 0)
-		return ret;
 	return cnt;
 }
 
@@ -541,13 +538,9 @@ static ssize_t aw2023_led_breath_off_attr_store(struct device *dev,
 
 	mutex_lock(&led->pdata->led->lock);
 	led->pdata->fall_time_ms = data;
-	ret = aw2023_write(led, AW2023_REG_LED0T1 + led->id*3,(led->pdata->fall_time_ms << AW2023_LED_TIME_SHIFT_MASK | led->pdata->off_time_ms));
 	mutex_unlock(&led->pdata->led->lock);
 
 	AW2023_DEBUG("%s[%d]: fall_time_ms=%d (max:15)\n",__func__,led->id,led->pdata->fall_time_ms);
-
-	if (ret < 0)
-		return ret;
 	return cnt;
 }
 
@@ -575,12 +568,9 @@ static ssize_t aw2023_led_ton_attr_store(struct device *dev,
 
 	mutex_lock(&led->pdata->led->lock);
 	led->pdata->hold_time_ms = data;
-	ret = aw2023_write(led, AW2023_REG_LED0T0 + led->id*3, (led->pdata->rise_time_ms << AW2023_LED_TIME_SHIFT_MASK  | led->pdata->hold_time_ms));
 	mutex_unlock(&led->pdata->led->lock);
 	AW2023_DEBUG("%s[%d]: hold_time_ms=%d (max:15)\n",__func__,led->id,led->pdata->hold_time_ms);
 
-	if (ret < 0)
-		return ret;
 	return cnt;
 }
 
@@ -608,13 +598,10 @@ static ssize_t aw2023_led_tr1_attr_store(struct device *dev,
 
 	mutex_lock(&led->pdata->led->lock);
 	led->pdata->rise_time_ms = data;
-	ret = aw2023_write(led, AW2023_REG_LED0T0 + led->id*3, (led->pdata->rise_time_ms << AW2023_LED_TIME_SHIFT_MASK  | led->pdata->hold_time_ms));
 	mutex_unlock(&led->pdata->led->lock);
 
 	AW2023_DEBUG("%s[%d]: rise_time_ms=%d (max:15)\n",__func__,led->id,led->pdata->rise_time_ms);
 
-	if (ret < 0)
-		return ret;
 	return cnt;
 }
 
@@ -643,13 +630,10 @@ static ssize_t aw2023_led_tf1_attr_store(struct device *dev,
 
 	mutex_lock(&led->pdata->led->lock);
 	led->pdata->fall_time_ms = data;
-	ret = aw2023_write(led, AW2023_REG_LED0T1 + led->id*3,(led->pdata->fall_time_ms << AW2023_LED_TIME_SHIFT_MASK | led->pdata->off_time_ms));
 	mutex_unlock(&led->pdata->led->lock);
 
 	AW2023_DEBUG("%s[%d]: fall_time_ms=%d (max:15)\n",__func__,led->id,led->pdata->fall_time_ms);
 
-	if (ret < 0)
-		return ret;
 	return cnt;
 }
 
@@ -677,12 +661,9 @@ static ssize_t aw2023_led_toff_attr_store(struct device *dev,
 
 	mutex_lock(&led->pdata->led->lock);
 	led->pdata->off_time_ms = data;
-	ret = aw2023_write(led, AW2023_REG_LED0T1 + led->id*3,(led->pdata->fall_time_ms << AW2023_LED_TIME_SHIFT_MASK | led->pdata->off_time_ms));
 	mutex_unlock(&led->pdata->led->lock);
 	AW2023_DEBUG("%s[%d]: off_time_ms=%d (max:15)\n",__func__,led->id,led->pdata->off_time_ms);
 
-	if (ret < 0)
-		return ret;
 	return cnt;
 }
 
@@ -725,7 +706,7 @@ static ssize_t aw2023_reg_store(struct device *dev,
 static ssize_t aw2023_led_debug_attr_show (struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%d (max:1)\n",aw2023_debug);
+	return snprintf(buf, PAGE_SIZE, "%u (max:1)\n",aw2023_debug);
 }
 
 static ssize_t aw2023_led_debug_attr_store(struct device *dev,
@@ -744,10 +725,8 @@ static ssize_t aw2023_led_debug_attr_store(struct device *dev,
 	aw2023_debug = data;
 	mutex_unlock(&led->pdata->led->lock);
 
-	AW2023_DEBUG("%s: aw2023_debug=%d (max:15)\n",__func__,aw2023_debug);
+	AW2023_DEBUG("%s: aw2023_debug=%u (max:15)\n",__func__,aw2023_debug);
 
-	if (ret < 0)
-		return ret;
 	return cnt;
 }
 
@@ -907,10 +886,11 @@ static int aw2023_init(struct aw2023_led *led)
 			dev_err(&led->client->dev, "aw2023_led_init_default：led[%d] error\n",i);
 			return ret;
 		}
+		if(led_default->esd_flag)
+		{
+			aw2023_brightness(&led[i]);
+		}
 	}
-
-	aw2023_debug = 0;
-
     return ret;
 }
 
@@ -931,6 +911,25 @@ static int aw2023_led_err_handle(struct aw2023_led *led_array,
 		led_array[i].pdata = NULL;
 	}
 	return i;
+}
+
+static void aw2023_work_func(struct work_struct *aw2023_work)
+{
+	u8 ret = 0,val = 0;
+	struct aw2023_led *led = container_of(aw2023_work, struct aw2023_led,aw2023_led_work.work);
+
+	ret = aw2023_read(led, AW2023_REG_STATUS, &val);
+	if(val) {
+		dev_notice(&led->client->dev, "%s AW2023_REG_STATUS[%d]:[0x%x]\n",__func__,led->id,val);
+		led_default->esd_flag = true;
+		ret = aw2023_init(led_default);
+		if (ret) {
+			dev_err(&led->client->dev, "%s reset failed :[%d]\n",__func__,ret);
+		}
+	} else {
+		led_default->esd_flag = false;
+	}
+	queue_delayed_work(led->aw2023_led_wq, &led->aw2023_led_work,3 * HZ);
 }
 
 static int aw2023_led_parse_child_node(struct aw2023_led *led_array,
@@ -1116,6 +1115,7 @@ static int aw2023_led_probe(struct i2c_client *client,
 		}
 	}
 
+	led_default = led_array;
 	i2c_set_clientdata(client, led_array);
 
 	ret = aw2023_power_init(led_array, true);
@@ -1129,8 +1129,9 @@ static int aw2023_led_probe(struct i2c_client *client,
 	{
 		ret = aw2023_power_on(led_array->pdata->led, true);
 		if(ret) {
-			dev_err(&client->dev, "AW2023 Probe power on fail\n");
-			goto fail_parsed_node;
+			if(aw2023_power_on(led_array->pdata->led, true)) {
+			    dev_err(&client->dev, "AW2023 Probe power on fail\n");
+			}
 		}
 	}
 
@@ -1146,6 +1147,14 @@ static int aw2023_led_probe(struct i2c_client *client,
 		dev_err(&client->dev, "aw2023_led_init_default：led[%d] error\n",i);
 		goto free_led_arry;
 	}
+
+	led_default->aw2023_led_wq = create_singlethread_workqueue("aw2023_led_workqueue");
+	if (!led_default->aw2023_led_wq) {
+		dev_err(&client->dev, "aw2023_led_workqueue error\n");
+		goto free_led_arry;
+	}
+	INIT_DELAYED_WORK(&led_default->aw2023_led_work, aw2023_work_func);
+	queue_delayed_work(led_default->aw2023_led_wq, &led_default->aw2023_led_work,LED_ESD_WORK_TIME * HZ);
 
 	return 0;
 fail_led_trigger:

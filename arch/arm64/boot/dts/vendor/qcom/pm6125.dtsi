@@ -27,6 +27,8 @@
 			qcom,kpdpwr-sw-debounce;
 			qcom,system-reset;
 			qcom,store-hard-reset-reason;
+			//#ifdef CONFIG_OPLUS_FEATURE_QCOM_PMICWD
+			// Add for qcom pmic watchdog
 			qcom,pmicwd;
 
 			qcom,pon_1 {

@@ -78,6 +78,11 @@ static int32_t cam_get_source_node_info(
 
 	soc_private->is_wled_flash =
 		of_property_read_bool(of_node, "wled-flash-support");
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	fctrl->pmic_pm8008 =
+		of_property_read_bool(of_node, "pmic-pm8008");
+	CAM_ERR(CAM_FLASH, "flash pmic pm8008 %d", fctrl->pmic_pm8008);
+#endif
 
 	rc = of_property_read_u32(of_node, "flash-type", &soc_private->flash_type);
 	if (rc) {

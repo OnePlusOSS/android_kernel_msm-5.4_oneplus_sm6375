@@ -21,7 +21,6 @@ typedef struct raw_spinlock {
 	arch_spinlock_t raw_lock;
 #ifdef CONFIG_DEBUG_SPINLOCK
 	unsigned int magic, owner_cpu;
-	pid_t owner_pid;
 	void *owner;
 #endif
 #ifdef CONFIG_DEBUG_LOCK_ALLOC

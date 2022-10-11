@@ -392,12 +392,6 @@ struct tcpc_device *tcpc_device_register(struct device *parent,
 
 	device_set_of_node_from_dev(&tcpc->dev, parent);
 
-	ret = device_register(&tcpc->dev);
-	if (ret) {
-		kfree(tcpc);
-		return ERR_PTR(ret);
-	}
-
 	INIT_DELAYED_WORK(&tcpc->init_work, tcpc_init_work);
 	INIT_DELAYED_WORK(&tcpc->event_init_work, tcpc_event_init_work);
 
@@ -410,6 +404,16 @@ struct tcpc_device *tcpc_device_register(struct device *parent,
 		wakeup_source_register(&tcpc->dev, "tcpc_detach_wake_lock");
 
 	tcpci_timer_init(tcpc);
+
+	ret = device_register(&tcpc->dev);
+	if (ret) {
+		tcpci_timer_deinit(tcpc);
+		wakeup_source_unregister(tcpc->detach_wake_lock);
+		wakeup_source_unregister(tcpc->attach_wake_lock);
+		devm_kfree(parent, tcpc);
+		return ERR_PTR(ret);
+	}
+
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 	pd_core_init(tcpc);
 #endif /* CONFIG_USB_POWER_DELIVERY */
@@ -468,8 +472,8 @@ static void bat_update_work_func(struct work_struct *work)
 	ret = power_supply_get_property(
 			tcpc->bat_psy, POWER_SUPPLY_PROP_CAPACITY, &value);
 	if (ret == 0) {
-		TCPC_INFO("%s battery update soc = %d\n",
-					__func__, value.intval);
+		/* TCPC_INFO("%s battery update soc = %d\n",
+					__func__, value.intval); */
 		tcpc->bat_soc = value.intval;
 	} else
 		TCPC_ERR("%s get battery capacity fail\n", __func__);
@@ -478,13 +482,13 @@ static void bat_update_work_func(struct work_struct *work)
 		POWER_SUPPLY_PROP_STATUS, &value);
 	if (ret == 0) {
 		if (value.intval == POWER_SUPPLY_STATUS_CHARGING) {
-			TCPC_INFO("%s Battery Charging\n", __func__);
+			/* TCPC_INFO("%s Battery Charging\n", __func__); */
 			tcpc->charging_status = BSDO_BAT_INFO_CHARGING;
 		} else if (value.intval == POWER_SUPPLY_STATUS_DISCHARGING) {
-			TCPC_INFO("%s Battery Discharging\n", __func__);
+			/* TCPC_INFO("%s Battery Discharging\n", __func__); */
 			tcpc->charging_status = BSDO_BAT_INFO_DISCHARGING;
 		} else {
-			TCPC_INFO("%s Battery Idle\n", __func__);
+			/* TCPC_INFO("%s Battery Idle\n", __func__); */
 			tcpc->charging_status = BSDO_BAT_INFO_IDLE;
 		}
 	}
@@ -831,6 +835,7 @@ static void tcpc_init_attrs(struct device_type *dev_type)
 		__tcpc_attrs[i] = &tcpc_device_attributes[i].attr;
 }
 
+extern int rt1711_driver_init(void);
 static int __init tcpc_class_init(void)
 {
 	pr_info("%s (%s)\n", __func__, TCPC_CORE_VERSION);
@@ -846,13 +851,16 @@ static int __init tcpc_class_init(void)
 		return PTR_ERR(tcpc_class);
 	}
 	tcpc_init_attrs(&tcpc_dev_type);
+	rt1711_driver_init();
 
 	pr_info("TCPC class init OK\n");
 	return 0;
 }
 
+extern void rt1711_driver_exit(void);
 static void __exit tcpc_class_exit(void)
 {
+	rt1711_driver_exit();
 	class_destroy(tcpc_class);
 	pr_info("TCPC class un-init OK\n");
 }

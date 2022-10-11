@@ -1,4 +1,5 @@
 obj-y	+= oplus_bq27541.o
+obj-y	+= oplus_sm5602.o
 ifeq ($(CONFIG_OPLUS_CHARGER_MTK6877),y)
 	obj-y   += oplus_optiga/
 endif

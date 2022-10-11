@@ -217,6 +217,16 @@ SND_SOC_DAILINK_DEFS(afepcm_tx1,
 	DAILINK_COMP_ARRAY(COMP_CODEC("msm-stub-codec.1", "msm-stub-tx")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-afe")));
 
+#ifdef CONFIG_SND_SOC_AW882XX
+SND_SOC_DAILINK_DEFS(sec_tdm_tx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("SEC_TDM_TX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+SND_SOC_DAILINK_DEFS(sec_tdm_rx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("SEC_TDM_RX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+#endif
 /* BE dai-links */
 SND_SOC_DAILINK_DEFS(afe_pcm_rx,
 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-q6-dev.224")),

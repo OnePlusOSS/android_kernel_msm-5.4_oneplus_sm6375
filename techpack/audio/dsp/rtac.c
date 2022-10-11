@@ -22,6 +22,10 @@
 #include <dsp/q6common.h>
 #include <dsp/q6voice.h>
 #include "adsp_err.h"
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+/* Add for audio kernel feedback */
+#include "feedback/oplus_audio_kernel_fb.h"
+#endif
 
 
 /* Max size of payload (buf size - apr header) */
@@ -1686,6 +1690,11 @@ int send_voice_apr(u32 mode, void *buf, u32 opcode)
 	if (result < 0) {
 		pr_err("%s: apr_send_pkt failed opcode = %x\n",
 			__func__, opcode);
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+		/* Add for audio kernel feedback */
+		ratelimited_fb("payload@@rtac.c:apr_send_pkt failed opcode=%x,mode=%u,dest_port=%u,ret=%d",
+			opcode, mode, dest_port, result);
+#endif
 		goto err;
 	}
 	/* Wait for the callback */
@@ -1695,6 +1704,11 @@ int send_voice_apr(u32 mode, void *buf, u32 opcode)
 	if (!result) {
 		pr_err("%s: apr_send_pkt timed out opcode = %x\n",
 			__func__, opcode);
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+		/* Add for audio kernel feedback */
+		ratelimited_fb("payload@@rtac.c:apr_send_pkt timed out opcode=%x,mode=%u,dest_port=%u,ret=%d",
+			opcode, mode, dest_port, result);
+#endif
 		goto err;
 	}
 	if (atomic_read(&rtac_common.apr_err_code)) {
@@ -1705,6 +1719,12 @@ int send_voice_apr(u32 mode, void *buf, u32 opcode)
 		result = adsp_err_get_lnx_err_code(
 					atomic_read(
 					&rtac_common.apr_err_code));
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+		/* Add for audio kernel feedback */
+		ratelimited_fb("payload@@rtac.c:DSP returned error code=[%s],opcode=%x,mode=%u,dest_port=%u,ret=%d",
+			adsp_err_get_err_str(atomic_read(&rtac_common.apr_err_code)),
+			opcode, mode, dest_port, result);
+#endif
 		goto err;
 	}
 

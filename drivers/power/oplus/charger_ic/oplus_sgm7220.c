@@ -251,6 +251,11 @@ struct sgm7220_info {
 	bool probe;
 	/*for qcom*/
 	struct extcon_dev	*extcon;
+
+	#ifdef OPLUS_ARCH_EXTENDS
+	/* add for type-c headphones fsa4480 notifiy */
+	u32 headphone_det_support;
+	#endif /* OPLUS_ARCH_EXTENDS */
 };
 
 bool __attribute__((weak)) oplus_get_otg_switch_status(void)
@@ -263,6 +268,23 @@ struct sgm7220_info *gchip = NULL;
 #define SGM7220_TYPEC_DIR_CC1	1
 #define SGM7220_TYPEC_DIR_CC2	2
 int oplus_sgm7220_set_mode(int mode);
+
+#ifdef OPLUS_ARCH_EXTENDS
+/* wenhuilong@MULTIMEDIA.AUDIODRIVER.CODEC, 2022/02/04, add for type-c headphones fsa4480 notifiy */
+struct blocking_notifier_head cc_audio_notifier = BLOCKING_NOTIFIER_INIT(cc_audio_notifier);
+
+int cc_audio_register_notify(struct notifier_block *nb)
+{
+        return blocking_notifier_chain_register(&cc_audio_notifier, nb);
+}
+EXPORT_SYMBOL(cc_audio_register_notify);
+
+int cc_audio_unregister_notify(struct notifier_block *nb)
+{
+        return blocking_notifier_chain_unregister(&cc_audio_notifier, nb);;
+}
+EXPORT_SYMBOL(cc_audio_unregister_notify);
+#endif /* OPLUS_ARCH_EXTENDS */
 
 /* i2c operate interfaces */
 static int sgm7220_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest)
@@ -938,6 +960,13 @@ static void process_interrupt_register(struct sgm7220_info *info)
 			} else if (info->type_c_param.attach_state == CABLE_STATE_TO_ACCESSORY){
 				info->sink_src_mode = AUDIO_ACCESS_MODE;
 				oplus_typec_ra_ra_insertion();
+				#ifdef OPLUS_ARCH_EXTENDS
+				/* add for type-c headphones fsa4480 notifiy */
+				if (info->headphone_det_support) {
+					blocking_notifier_call_chain(&cc_audio_notifier, 1, NULL);
+					pr_err("%s this is audio access enter!\n", __func__);
+				}
+				#endif /* OPLUS_ARCH_EXTENDS */
 			}
 		} else {
 			switch (info->sink_src_mode) {
@@ -946,6 +975,11 @@ static void process_interrupt_register(struct sgm7220_info *info)
 					break;
 				case SINK_MODE:
 				case AUDIO_ACCESS_MODE:
+					#ifdef OPLUS_ARCH_EXTENDS
+					/* add for type-c headphones fsa4480 notifiy */
+					if (info->headphone_det_support)
+						blocking_notifier_call_chain(&cc_audio_notifier, 0, NULL);
+					#endif /* OPLUS_ARCH_EXTENDS */
 					oplus_typec_src_removal();
 					break;
 				case UNATTACHED_MODE:
@@ -1219,11 +1253,30 @@ static int sgm7220_probe(struct i2c_client *client, const struct i2c_device_id *
 	struct sgm7220_info *info;
 	struct device_node *np = client->dev.of_node;
 	int ret, irq;
+	#ifdef OPLUS_ARCH_EXTENDS
+	/* add for type-c headphones fsa4480 notifiy */
+	u32 headphone_det_support = 0;
+	#endif /* OPLUS_ARCH_EXTENDS */
 
 	pr_err("%s: lkl enter\n", __func__);
 	info = kzalloc(sizeof(struct sgm7220_info), GFP_KERNEL);
 	info->i2c = client;
 	info->dev = &client->dev;
+
+	#ifdef OPLUS_ARCH_EXTENDS
+	/* add for type-c headphones fsa4480 notifiy */
+	ret = of_property_read_u32(client->dev.of_node,
+			"oplus,headphone-det-support", &headphone_det_support);
+	if (ret || headphone_det_support == 0) {
+		info->headphone_det_support = 0;
+	} else {
+		info->headphone_det_support = 1;
+	}
+	dev_err(info->dev,
+		"%s: headphone_det_support = %d\n",
+			__func__, info->headphone_det_support);
+	#endif /* OPLUS_ARCH_EXTENDS */
+
 	atomic_set(&info->suspended, 0);
 	/* get gpio(s) */
 	ret = sgm7220_parse_gpio_from_dts(np, info);

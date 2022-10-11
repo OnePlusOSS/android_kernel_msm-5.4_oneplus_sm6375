@@ -80,3 +80,7 @@ source "drivers/soc/oplus/system/misc/Kconfig"
 #ifdef OPLUS_FEATURE_RT_INFO
 source "drivers/soc/oplus/system/rt_info/Kconfig"
 #endif
+#ifdef OPLUS_FEATURE_MDMFEATURE
+# add for mdm feature
+source "drivers/soc/oplus/system/mdmfeature/Kconfig"
+#endif /*OPLUS_FEATURE_MDMFEATURE*/

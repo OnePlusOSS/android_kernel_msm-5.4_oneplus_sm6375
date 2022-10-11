@@ -296,7 +296,7 @@
 
 		qcom,voocphy_current_default = <30>;
 
-		qcom,svooc_cool_down_current_limit = <100 20 20 20 30 40 50 60 70 80 90 100>;
+		qcom,svooc_cool_down_current_limit = <100 24 24 30 34 40 44 50 54 60 70 100>;
 		qcom,vooc_cool_down_current_limit = <60 20 20 20 30 40 50 60>;
 
 		qcom,vooc_little_cold_full_voltage = <4430>;
@@ -914,8 +914,8 @@
 		qcom,short_c_bat_vfloat_sw_limit = <3750>;
 
 		qcom,max_chg_time_sec = <72000>;
-		qcom,charger_hv_thr = <10000>;
-		qcom,charger_recv_thr = <9800>;
+		qcom,charger_hv_thr = <5800>;
+		qcom,charger_recv_thr = <5500>;
 		qcom,charger_lv_thr = <3400>;
 		qcom,vbatt_full_thr = <4435>;
 		qcom,vbatt_hv_thr = <4600>;

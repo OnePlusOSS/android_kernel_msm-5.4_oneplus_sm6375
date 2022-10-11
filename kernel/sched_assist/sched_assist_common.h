@@ -106,6 +106,27 @@ enum ANMATION_TYPE
         BACKUP,
 	SYSTEMUI_SPLIT_STARTM,
 };
+
+#ifdef CONFIG_OPLUS_UX_IM_FLAG
+/*
+ * new flag should be add before MAX_IM_FLAG_TYPE,
+ * never change the value of those existed flag type.
+ */
+enum IM_FLAG_TYPE {
+	IM_FLAG_NONE = 0,
+	IM_FLAG_SURFACEFLINGER,
+	IM_FLAG_HWC,
+	IM_FLAG_RENDERENGINE,
+	IM_FLAG_WEBVIEW,
+	IM_FLAG_CAMERA_HAL,
+	IM_FLAG_3RD_AUDIO,
+	IM_FLAG_HWBINDER,
+	IM_FLAG_LAUNCHER,
+	IM_FLAG_LAUNCHER_NON_UX_RENDER,
+	MAX_IM_FLAG_TYPE,
+};
+#endif
+
 struct ux_sched_cluster {
         struct cpumask cpus;
         unsigned long capacity;

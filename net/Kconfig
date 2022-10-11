@@ -504,3 +504,6 @@ source "net/oplus_nwpower/Kconfig"
 
 # ShiQianhua@NETWORK.DATA.2341538 2021/10/18 add for network modules
 source "net/oplus_modules/Kconfig"
+
+source "net/oplus_wificapcenter/Kconfig"
+

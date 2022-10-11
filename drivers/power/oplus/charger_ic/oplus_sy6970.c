@@ -69,11 +69,16 @@ extern void oplus_get_usbtemp_volt(struct oplus_chg_chip *chip);
 extern void oplus_set_typec_sinkonly(void);
 extern void oplus_set_typec_cc_open(void);
 extern bool oplus_chg_check_qchv_condition(void);
+int oplus_chg_get_voocphy_support(void);
+void oplus_voocphy_adapter_plugout_handler(void);
+void smbchg_set_chargerid_switch_val(int value);
+int smbchg_get_chargerid_switch_val(void);
 #endif
 
 extern void oplus_wake_up_usbtemp_thread(void);
 extern bool oplus_chg_wake_update_work(void);
 extern int get_boot_mode(void);
+void oplus_voocphy_set_pdqc_config(void);
 
 void __attribute__((weak)) oplus_start_usb_peripheral(void)
 {
@@ -269,6 +274,7 @@ struct sy6970 {
 	struct mutex		dpdm_lock;
 	struct regulator	*dpdm_reg;
 	bool			dpdm_enabled;
+	bool qc_aicl_true;
 };
 
 static bool disable_PE = 0;
@@ -1174,6 +1180,7 @@ static int sy6970_switch_to_hvdcp(struct sy6970 *bq, enum hvdcp_type type)
 		Charger_Detect_Init();
 		oplus_for_cdp();
 		sy6970_force_dpdm(bq, true);
+		bq->qc_aicl_true = true;
 		chg_info(" set to 5v\n");
 		break;
 
@@ -1181,6 +1188,7 @@ static int sy6970_switch_to_hvdcp(struct sy6970 *bq, enum hvdcp_type type)
 		/*HV_TYPE: Higher Voltage Types*/
 		val = SY6970_HVDCP_DISABLE << SY6970_HVDCPHV_SHIFT;
 		ret = sy6970_update_bits(bq, SY6970_REG_02, 4, val);
+		bq->qc_aicl_true = true;
 		chg_info(" set to 9v\n");
 		break;
 
@@ -1355,7 +1363,7 @@ static int sy6970_get_charger_type(struct sy6970 *bq,
 	}
 
 	*type = oplus_chg_type;
-
+	oplus_set_usb_props_type(oplus_chg_type);
 	return 0;
 }
 
@@ -1625,6 +1633,7 @@ static irqreturn_t sy6970_irq_handler(int irq, void *data)
 		goto POWER_CHANGE;
 
 	} else if (prev_pg && !bq->power_good) {
+		atomic_set(&g_bq->charger_suspended, 0);
 		bq->chg_cur = 0;
 		bq->aicr = 500;
 		bq->qc_to_9v_count = 0;
@@ -1635,6 +1644,10 @@ static irqreturn_t sy6970_irq_handler(int irq, void *data)
 		if (!ret && hz_mode) {
 			chg_err("hiz mode ignore\n");
 			return IRQ_HANDLED;
+		}
+
+		if(oplus_chg_get_voocphy_support() == AP_SINGLE_CP_VOOCPHY) {
+			oplus_voocphy_adapter_plugout_handler();
 		}
 
 		bq->is_force_aicl = false;
@@ -1648,6 +1661,7 @@ static irqreturn_t sy6970_irq_handler(int irq, void *data)
 		bq->retry_hvdcp_algo = false;
 		bq->chg_type = CHARGER_UNKNOWN;
 		bq->oplus_chg_type = POWER_SUPPLY_TYPE_UNKNOWN;
+		oplus_set_usb_props_type(bq->oplus_chg_type);
 		bq->nonstand_retry_bc = false;
 		bq->is_bc12_end = true;
 
@@ -1713,7 +1727,7 @@ static irqreturn_t sy6970_irq_handler(int irq, void *data)
 			|| (cur_chg_type == POWER_SUPPLY_TYPE_USB_CDP)) {
 		chg_info(" type usb %d\n", bq->usb_connect_start);
 		bq->oplus_chg_type = cur_chg_type;
-
+		oplus_set_usb_props_type(bq->oplus_chg_type);
 		/*QCM Platform Need to notify the TYPEC*/
 		oplus_start_usb_peripheral();
 
@@ -1732,6 +1746,7 @@ static irqreturn_t sy6970_irq_handler(int irq, void *data)
 		/*Charger_Detect_Release();*/
 
 		bq->oplus_chg_type = cur_chg_type;
+		oplus_set_usb_props_type(bq->oplus_chg_type);
 		bq->is_force_aicl = false;
 		sy6970_inform_charger_type(bq);
 
@@ -2449,7 +2464,7 @@ static int sy6970_chgdet_en(struct sy6970 *bq, bool en)
 
 		bq->chg_type = CHARGER_UNKNOWN;
 		bq->oplus_chg_type = POWER_SUPPLY_TYPE_UNKNOWN;
-
+		oplus_set_usb_props_type(bq->oplus_chg_type);
 		if (chip->is_double_charger_support && chip->sub_chg_ops)
 			chip->sub_chg_ops->charging_disable();
 
@@ -2912,8 +2927,17 @@ int oplus_sy6970_hardware_init(void)
 
 int oplus_sy6970_is_charging_enabled(void)
 {
-
-	return g_bq->charge_enabled;
+	int ret = 0;
+	u8 val;
+	struct sy6970 *bq = g_bq;
+	if (!bq) {
+		return 0;
+	}
+	ret = sy6970_read_byte(bq, SY6970_REG_03, &val);
+	if (!ret) {
+		return !!(val & SY6970_CHG_CONFIG_MASK);
+	}
+	return 0;
 }
 
 int oplus_sy6970_is_charging_done(void)
@@ -2970,6 +2994,14 @@ int oplus_sy6970_get_chg_current_step(void)
 
 int oplus_sy6970_get_charger_type(void)
 {
+	struct oplus_chg_chip *g_oplus_chip = oplus_chg_get_chg_struct();
+
+	if (!g_oplus_chip)
+                return POWER_SUPPLY_TYPE_UNKNOWN;
+
+	if (g_bq->oplus_chg_type != g_oplus_chip->charger_type && g_oplus_chip->usb_psy)
+                power_supply_changed(g_oplus_chip->usb_psy);
+
 	return g_bq->oplus_chg_type;
 }
 
@@ -3000,6 +3032,7 @@ int oplus_sy6970_charger_unsuspend(void)
 		g_oplus_chip->sub_chg_ops->charger_unsuspend();
 
 	printk("%s\n", __func__);
+	sy6970_enable_charger(g_bq);
 	return 0;
 }
 
@@ -3143,6 +3176,11 @@ void vol_convert_work(struct work_struct *work)
 	return;
 }
 
+#define COOL_DOWN_5V_UI_SOC_LEVEL 90
+#define COOL_DOWN_5V_CHARGER_VOL 7500
+#define PULL_UP_9V_CHARGER_VOL 6500
+#define BLACK_COOL_DOWN_COUNT 3
+
 int oplus_sy6970_set_qc_config(void)
 {
 	struct oplus_chg_chip *chip = g_oplus_chip;
@@ -3199,7 +3237,7 @@ int oplus_sy6970_set_qc_config(void)
 			    && (chip->ui_soc >= 90))
 			|| ((chip->limits.tbatt_pdqc_to_5v_thr > 0)
 			    && (chip->temperature > chip->limits.tbatt_pdqc_to_5v_thr))) {
-		if (oplus_sy6970_get_vbus() > 7500) {
+		if (oplus_sy6970_get_vbus() > COOL_DOWN_5V_CHARGER_VOL) {
 			chg_info(" start set qc to 5V");
 			g_bq->pdqc_setup_5v = true;
 			g_bq->qc_to_9v_count = 0;
@@ -3207,32 +3245,44 @@ int oplus_sy6970_set_qc_config(void)
 			if (g_bq->is_bc12_end) {
 				g_bq->is_bc12_end = false;
 				schedule_delayed_work(&g_bq->sy6970_vol_convert_work, 0);
+			} else {
+				ret = -1;
 			}
+		} else {
+			ret = -1;
 		}
+	} else if (!chip->cool_down_force_5v
+		&& (chip->batt_volt <= chip->limits.vbatt_pdqc_to_9v_thr)
+		&& (chip->charging_state == CHARGING_STATUS_CCCV)
+		&& (chip->limits.tbatt_pdqc_to_9v_thr < 0
+		|| chip->temperature < chip->limits.tbatt_pdqc_to_9v_thr)
+		&& (chip->ui_soc < COOL_DOWN_5V_UI_SOC_LEVEL)
+		&& (oplus_sy6970_get_vbus() < PULL_UP_9V_CHARGER_VOL)) {
+		chg_info("start set to 9V. count (%d)", g_bq->qc_to_9v_count);
+		g_bq->pdqc_setup_5v = false;
+                oplus_voocphy_set_pdqc_config();
 
-	} else { // 9v
-		if (oplus_sy6970_get_vbus() < 7500) {
-			chg_info("start set to 9V. count (%d)", g_bq->qc_to_9v_count);
-			g_bq->pdqc_setup_5v = false;
-
-			/*Fix HW-050450C00 HVDCP BUG.*/
-			if (g_bq->qc_to_9v_count > 3) {
+		if (g_bq->qc_to_9v_count > BLACK_COOL_DOWN_COUNT) {
 				chg_err("set hvdcp_can_enabled as false and disable hvdcp");
 				g_bq->hvdcp_can_enabled = false;
 				sy6970_disable_hvdcp(g_bq);
 				ret = -1;
-
-			} else {
-				if (g_bq->is_bc12_end) {
-					g_bq->is_bc12_end = false;
-					schedule_delayed_work(&g_bq->sy6970_vol_convert_work, 0);
-				}
-
-				g_bq->qc_to_9v_count++;
-			}
-
 		} else {
-			g_bq->qc_to_9v_count = 0;
+			if (g_bq->is_bc12_end) {
+				g_bq->is_bc12_end = false;
+				g_bq->qc_aicl_true = false;
+				schedule_delayed_work(&g_bq->sy6970_vol_convert_work, 0);
+			} else {
+				ret = -1;
+			}
+			g_bq->qc_to_9v_count++;
+		}
+	} else {
+		g_bq->qc_to_9v_count = 0;
+		if (g_bq->qc_aicl_true) {
+			chg_err("need do aicl once for qc");
+			ret = 0;
+		} else {
 			ret = -1;
 		}
 	}
@@ -3242,6 +3292,28 @@ int oplus_sy6970_set_qc_config(void)
 
 int oplus_sy6970_enable_qc_detect(void)
 {
+	u8 reg_val = 0;
+	static int retry = 150;
+	int vbus_stat = 0;
+	sy6970_enable_enlim(g_bq);
+	sy6970_set_input_current_limit(g_bq, 500);
+	Charger_Detect_Init();
+	sy6970_enable_hvdcp(g_bq);
+	sy6970_force_dpdm(g_bq, true);
+	sy6970_enable_auto_dpdm(g_bq, false);
+	while(retry--) {
+		msleep(20);
+		sy6970_read_byte(g_bq, SY6970_REG_0B, &reg_val);
+		vbus_stat = (reg_val & SY6970_VBUS_STAT_MASK);
+		vbus_stat >>= SY6970_VBUS_STAT_SHIFT;
+		if (vbus_stat == SY6970_VBUS_TYPE_HVDCP) {
+			g_bq->hvdcp_can_enabled = true;
+			g_bq->aicr = 2000;
+			break;
+		}
+	}
+	Charger_Detect_Release();
+	sy6970_disable_enlim(g_bq);
 	return 0;
 }
 
@@ -3256,6 +3328,7 @@ bool oplus_sy6970_need_retry_aicl(void)
 		if (g_oplus_chip->chg_ops->get_charger_volt() > 4400) {
 			g_bq->chg_type = STANDARD_HOST;
 			g_bq->oplus_chg_type = POWER_SUPPLY_TYPE_USB;
+			oplus_set_usb_props_type(g_bq->oplus_chg_type);
 			g_oplus_chip->charger_type = POWER_SUPPLY_TYPE_USB;
 			g_oplus_chip->chg_ops->usb_connect();
 			connect = true;
@@ -3340,6 +3413,7 @@ int oplus_charger_type_thread(void *data)
 		case SY6970_VBUS_TYPE_NONE:
 			bq->chg_type = CHARGER_UNKNOWN;
 			bq->oplus_chg_type = POWER_SUPPLY_TYPE_UNKNOWN;
+			oplus_set_usb_props_type(bq->oplus_chg_type);
 			msleep(20);
 			re_check_count++;
 
@@ -3540,8 +3614,8 @@ struct oplus_chg_operations  oplus_chg_sy6970_ops = {
 	.get_charger_type = oplus_sy6970_get_charger_type,
 	.get_boot_mode = (int (*)(void))get_boot_mode,
 	.check_chrdet_status = oplus_sy6970_check_chrdet_status,
-	.set_chargerid_switch_val = oplus_sy6970_set_chargerid_switch_val,
-	.get_chargerid_switch_val = oplus_sy6970_get_chargerid_switch_val,
+	.set_chargerid_switch_val = smbchg_set_chargerid_switch_val,
+        .get_chargerid_switch_val = smbchg_get_chargerid_switch_val,
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 	.get_charger_volt = mt6357_get_vbus_voltage,
 	.get_chargerid_volt = oplus_sy6970_get_chargerid_volt,
@@ -3553,7 +3627,7 @@ struct oplus_chg_operations  oplus_chg_sy6970_ops = {
 	.usb_connect = mt_usb_connect,
 	.usb_disconnect = mt_usb_disconnect,
 #else
-	.get_chargerid_volt = NULL,
+	.get_chargerid_volt = oplus_sy6970_get_chargerid_volt,
 	.get_charger_volt = oplus_sy6970_get_vbus,
 	.get_boot_reason = smbchg_get_boot_reason,
 	.get_instant_vbatt = qpnp_get_battery_voltage,
@@ -3762,6 +3836,7 @@ static int sy6970_charger_probe(struct i2c_client *client,
 	bq->is_bc12_end = true;
 
 	bq->oplus_chg_type = POWER_SUPPLY_TYPE_UNKNOWN;
+	oplus_set_usb_props_type(bq->oplus_chg_type);
 	bq->pre_current_ma = -1;
 	bq->chg_start_check = true;
 	bq->usb_connect_start = false;
@@ -3769,6 +3844,7 @@ static int sy6970_charger_probe(struct i2c_client *client,
 	bq->sdp_retry = false;
 	bq->cdp_retry = false;
 	bq->qc_to_9v_count = 0;
+	bq->qc_aicl_true = false;
 
 	/* Charger_Detect_Init(); */
 	sy6970_disable_hvdcp(bq);

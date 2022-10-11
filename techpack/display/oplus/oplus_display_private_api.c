@@ -80,7 +80,7 @@ u32 oplus_last_backlight = 0;
 u32 oplus_backlight_delta = 0;
 
 int oplus_dimlayer_hbm = 0;
-
+int aod_size = 0;
 /* #ifdef OPLUS_BUG_COMPATIBILITY */
 /* wangcheng@MULTIMEDIA.DISPLAY.LCD 2021/12/02 add for save cabc mode */
 int g_cabc_recover = 0;
@@ -245,9 +245,6 @@ int dsi_panel_read_panel_reg(struct dsi_display_ctrl *ctrl,
 		return 1;
 	}
 
-	/* acquire panel_lock to make sure no commands are in progress */
-	mutex_lock(&panel->panel_lock);
-
 	if (!dsi_panel_initialized(panel)) {
 		rc = -EINVAL;
 		goto error;
@@ -277,8 +274,6 @@ int dsi_panel_read_panel_reg(struct dsi_display_ctrl *ctrl,
 	}
 
 error:
-	/* release panel_lock */
-	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
 
@@ -319,12 +314,15 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 			       size_t len)
 {
 	int rc = 0;
+	struct dsi_panel *panel;
 	struct dsi_display_ctrl *m_ctrl;
 
 	if (!display || !display->panel || data == NULL) {
 		pr_err("%s, Invalid params\n", __func__);
 		return -EINVAL;
 	}
+
+	panel = display->panel;
 /* #ifdef OPLUS_BUG_COMPATIBILITY */
 /* wangcheng@MULTIMEDIA.DISPLAY.LCD 2021/11/25 solve the problem of read panel number return err */
 	if (!strcmp(display->panel->name, "dsjm ili7807s 21707 fhd plus mipi panel with DSC")) {
@@ -332,7 +330,7 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 	}
 /* #endif */
 
-	mutex_lock(&display->display_lock);
+	mutex_lock(&panel->panel_lock);
 
 	m_ctrl = &display->ctrl[display->cmd_master_idx];
 
@@ -376,7 +374,7 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 	dsi_display_cmd_engine_disable(display);
 
 done:
-	mutex_unlock(&display->display_lock);
+	mutex_unlock(&panel->panel_lock);
 	pr_err("%s, return: %d\n", __func__, rc);
 	return rc;
 }
@@ -1351,17 +1349,12 @@ struct oplus_brightness_alpha *oplus_brightness_alpha_lut = NULL;
 int interpolate(int x, int xa, int xb, int ya, int yb)
 {
 	int bf, factor, plus;
-	int sub = 0;
 
 	bf = 2 * (yb - ya) * (x - xa) / (xb - xa);
 	factor = bf / 2;
 	plus = bf % 2;
 
-	if ((xa - xb) && (yb - ya)) {
-		sub = 2 * (x - xa) * (x - xb) / (yb - ya) / (xa - xb);
-	}
-
-	return ya + factor + plus + sub;
+	return ya + factor + plus;
 }
 EXPORT_SYMBOL(interpolate);
 
@@ -1799,6 +1792,7 @@ static ssize_t oplus_display_get_dimlayer_hbm(struct kobject *obj,
 }
 
 int oplus_dimlayer_hbm_vblank_count = 0;
+extern int oplus_dimlayer_hbm_count;
 atomic_t oplus_dimlayer_hbm_vblank_ref = ATOMIC_INIT(0);
 static ssize_t oplus_display_set_dimlayer_hbm(struct kobject *obj,
 		struct kobj_attribute *attr,
@@ -1833,6 +1827,8 @@ static ssize_t oplus_display_set_dimlayer_hbm(struct kobject *obj,
 	}
 
 	oplus_dimlayer_hbm = value;
+	if (!value)
+		oplus_dimlayer_hbm_count = value;
 
 	pr_err("debug for oplus_display_set_dimlayer_hbm set oplus_dimlayer_hbm = %d\n",
 	       oplus_dimlayer_hbm);
@@ -1970,10 +1966,6 @@ static ssize_t oplus_set_ffl_setting(struct kobject *obj,
 
 int oplus_onscreenfp_status = 0;
 EXPORT_SYMBOL(oplus_onscreenfp_status);
-ktime_t oplus_onscreenfp_pressed_time;
-EXPORT_SYMBOL(oplus_onscreenfp_pressed_time);
-u32 oplus_onscreenfp_vblank_count = 0;
-EXPORT_SYMBOL(oplus_onscreenfp_vblank_count);
 int oplus_display_mode = 1;
 static DECLARE_WAIT_QUEUE_HEAD(oplus_aod_wait);
 
@@ -2046,7 +2038,11 @@ static ssize_t oplus_display_notify_fp_press(struct kobject *obj,
 		return count;
 	}
 
-	pr_err("notify fingerpress %s\n", onscreenfp_status ? "on" : "off");
+	pr_info("notify fingerpress %s\n", onscreenfp_status ? "on" : "off");
+	if ((oplus_get_panel_brightness() == 0) && onscreenfp_status) {
+		pr_info("notify fingerpress return as screen is off\n");
+		return count;
+	}
 
 	vblank_get = drm_crtc_vblank_get(dsi_connector->state->crtc);
 
@@ -2085,15 +2081,6 @@ static ssize_t oplus_display_notify_fp_press(struct kobject *obj,
 		}
 	}
 
-#ifdef OPLUS_FEATURE_AOD_RAMLESS
-	if (!display->panel->oplus_priv.is_aod_ramless) {
-#endif /* OPLUS_FEATURE_AOD_RAMLESS */
-		oplus_onscreenfp_vblank_count = drm_crtc_vblank_count(
-			dsi_connector->state->crtc);
-		oplus_onscreenfp_pressed_time = ktime_get();
-#ifdef OPLUS_FEATURE_AOD_RAMLESS
-	}
-#endif /* OPLUS_FEATURE_AOD_RAMLESS */
 
 	drm_modeset_lock_all(drm_dev);
 
@@ -2180,7 +2167,6 @@ error:
 
 #ifdef OPLUS_FEATURE_AOD_RAMLESS
 
-#define RAMLESS_AOD_AREA_NUM		6
 #define RAMLESS_AOD_PAYLOAD_SIZE	100
 static struct aod_area oplus_aod_area[RAMLESS_AOD_AREA_NUM];
 
@@ -2208,16 +2194,16 @@ int oplus_display_update_aod_area_unlock(void)
 
 	memset(payload, 0, RAMLESS_AOD_PAYLOAD_SIZE);
 
-	for (i = 0; i < RAMLESS_AOD_AREA_NUM; i++) {
+	for (i = 0; i < aod_size; i++) {
 		struct aod_area *area = &oplus_aod_area[i];
+		int h_start = 0, h_block = 0, v_start = 0, v_end = 0, off = 0;
 
-		payload[0] |= (!!area->enable) << (RAMLESS_AOD_AREA_NUM - i - 1);
-		if (area->enable) {
-			int h_start = area->x;
-			int h_block = area->w / 100;
-			int v_start = area->y;
-			int v_end = area->y + area->h;
-			int off = i * 5;
+		payload[0] |= (1) << (RAMLESS_AOD_AREA_NUM - i - 1);
+		h_start = area->x;
+		h_block = area->w / 100;
+		v_start = area->y;
+		v_end = area->y + area->h;
+		off = i * 5;
 
 			/* Rect Setting */
 			payload[1 + off] = h_start >> 4;
@@ -2261,7 +2247,6 @@ int oplus_display_update_aod_area_unlock(void)
 
 			/* Area Gray Setting */
 			payload[37 + i] = area->gray & 0xff;
-		}
 	}
 	payload[43] = 0x00;
 
@@ -2290,27 +2275,23 @@ static ssize_t oplus_display_get_aod_area(struct kobject *obj,
 	mutex_lock(&display->panel->panel_lock);
 
 	cnt = snprintf(buf, PAGE_SIZE, "aod_area info:\n");
-	for (i = 0; i < RAMLESS_AOD_AREA_NUM; i++) {
+	for (i = 0; i < aod_size; i++) {
 		struct aod_area *area = &oplus_aod_area[i];
 
-		if (area->enable) {
-			cnt += snprintf(buf + cnt, PAGE_SIZE,
-					"    area[%d]: [%dx%d]-[%dx%d]-%d-%d-%d-%d\n",
-					cnt, area->x, area->y, area->w, area->h,
-					area->color, area->bitdepth, area->mono, area->gray);
-		}
+		cnt += snprintf(buf + cnt, PAGE_SIZE,
+				"    area[%d]: [%dx%d]-[%dx%d]-%d-%d-%d-%d\n",
+				cnt, area->x, area->y, area->w, area->h,
+				area->color, area->bitdepth, area->mono, area->gray);
 	}
 
 	cnt += snprintf(buf + cnt, PAGE_SIZE, "aod_area raw:\n");
-	for (i = 0; i < RAMLESS_AOD_AREA_NUM; i++) {
+	for (i = 0; i < aod_size; i++) {
 		struct aod_area *area = &oplus_aod_area[i];
 
-		if (area->enable) {
-			cnt += snprintf(buf + cnt, PAGE_SIZE,
-					"%d %d %d %d %d %d %d %d",
-					area->x, area->y, area->w, area->h,
-					area->color, area->bitdepth, area->mono, area->gray);
-		}
+		cnt += snprintf(buf + cnt, PAGE_SIZE,
+				"%d %d %d %d %d %d %d %d",
+				area->x, area->y, area->w, area->h,
+				area->color, area->bitdepth, area->mono, area->gray);
 		cnt += snprintf(buf + cnt, PAGE_SIZE, ":");
 	}
 	cnt += snprintf(buf + cnt, PAGE_SIZE, "aod_area end\n");
@@ -2350,9 +2331,9 @@ static ssize_t oplus_display_set_aod_area(struct kobject *obj,
 		pr_err("aod_area[%d]: [%dx%d]-[%dx%d]-%d-%d-%d-%d\n",
 				cnt, area->x, area->y, area->w, area->h,
 				area->color, area->bitdepth, area->mono, area->gray);
-		area->enable = true;
 		cnt++;
 	}
+	aod_size = cnt;
 	oplus_display_update_aod_area_unlock();
 	mutex_unlock(&display->panel->panel_lock);
 	mutex_unlock(&display->display_lock);
@@ -2499,27 +2480,23 @@ int oplus_display_panel_get_aod_area(void *buf)
 	mutex_lock(&display->panel->panel_lock);
 
 	cnt = snprintf(para, PAGE_SIZE, "aod_area info:\n");
-	for (i = 0; i < RAMLESS_AOD_AREA_NUM; i++) {
+	for (i = 0; i < aod_size; i++) {
 		struct aod_area *area = &oplus_aod_area[i];
 
-		if (area->enable) {
-			cnt += snprintf(para + cnt, PAGE_SIZE,
-					"    area[%d]: [%dx%d]-[%dx%d]-%d-%d-%d-%d\n",
-					cnt, area->x, area->y, area->w, area->h,
-					area->color, area->bitdepth, area->mono, area->gray);
-		}
+		cnt += snprintf(para + cnt, PAGE_SIZE,
+				"    area[%d]: [%dx%d]-[%dx%d]-%d-%d-%d-%d\n",
+				cnt, area->x, area->y, area->w, area->h,
+				area->color, area->bitdepth, area->mono, area->gray);
 	}
 
 	cnt += snprintf(para + cnt, PAGE_SIZE, "aod_area raw:\n");
-	for (i = 0; i < RAMLESS_AOD_AREA_NUM; i++) {
+	for (i = 0; i < aod_size; i++) {
 		struct aod_area *area = &oplus_aod_area[i];
 
-		if (area->enable) {
-			cnt += snprintf(para + cnt, PAGE_SIZE,
-					"%d %d %d %d %d %d %d %d",
-					area->x, area->y, area->w, area->h,
-					area->color, area->bitdepth, area->mono, area->gray);
-		}
+		cnt += snprintf(para + cnt, PAGE_SIZE,
+				"%d %d %d %d %d %d %d %d",
+				area->x, area->y, area->w, area->h,
+				area->color, area->bitdepth, area->mono, area->gray);
 		cnt += snprintf(para + cnt, PAGE_SIZE, ":");
 	}
 	cnt += snprintf(para + cnt, PAGE_SIZE, "aod_area end\n");
@@ -2532,9 +2509,8 @@ int oplus_display_panel_get_aod_area(void *buf)
 
 int oplus_display_panel_set_aod_area(void *buf) {
 	struct dsi_display *display = get_main_display();
-	char *para = (char *)buf;
-	char *token;
-	int cnt = 0;
+	int i = 0;
+	struct aod_area_para *area_para = buf;
 
 	if (!display || !display->panel || !display->panel->oplus_priv.is_aod_ramless) {
 		pr_err("failed to find dsi display or is not ramless\n");
@@ -2545,21 +2521,16 @@ int oplus_display_panel_set_aod_area(void *buf) {
 	mutex_lock(&display->panel->panel_lock);
 
 	memset(oplus_aod_area, 0, sizeof(struct aod_area) * RAMLESS_AOD_AREA_NUM);
+	memcpy((struct aod_area*)oplus_aod_area, area_para->panel_aod_area, sizeof(struct aod_area) * RAMLESS_AOD_AREA_NUM);
 
-	while ((token = strsep(&para, ":")) != NULL) {
-		struct aod_area *area = &oplus_aod_area[cnt];
-		if (!*token)
-			continue;
-
-		sscanf(token, "%d %d %d %d %d %d %d %d",
-				&area->x, &area->y, &area->w, &area->h,
-				&area->color, &area->bitdepth, &area->mono, &area->gray);
-		pr_err("aod_area[%d]: [%dx%d]-[%dx%d]-%d-%d-%d-%d\n",
-				cnt, area->x, area->y, area->w, area->h,
+	for (i = 0; i < area_para->size; i++) {
+		struct aod_area *area = &oplus_aod_area[i];
+		pr_info("aod_area[%d]: [%dx%d]-[%dx%d]-%d-%d-%d-%d\n",
+				i, area->x, area->y, area->w, area->h,
 				area->color, area->bitdepth, area->mono, area->gray);
-		area->enable = true;
-		cnt++;
 	}
+	pr_info(" aod_area size = %d", area_para->size);
+	aod_size = area_para->size;
 	oplus_display_update_aod_area_unlock();
 	mutex_unlock(&display->panel->panel_lock);
 	mutex_unlock(&display->display_lock);
@@ -2770,7 +2741,7 @@ static int dsi_display_failsafe_on(struct dsi_display *display) {
 	return rc;
 }
 
-int dsi_display_failsafe_off(struct dsi_display *display) {
+static int dsi_display_failsafe_off(struct dsi_display *display) {
 	int rc = 0;
 
 	if (!display || !display->panel) {
@@ -2799,7 +2770,7 @@ int dsi_display_failsafe_off(struct dsi_display *display) {
 	return rc;
 }
 
-int __oplus_display_set_failsafe(int mode)
+static int __oplus_display_set_failsafe(int mode)
 {
 	mutex_lock(&oplus_failsafe_lock);
 	if (mode != failsafe_mode) {
@@ -2810,7 +2781,9 @@ int __oplus_display_set_failsafe(int mode)
 	return 0;
 }
 
-int oplus_display_set_failsafe(void *buf)
+static ssize_t oplus_display_set_failsafe(struct kobject *obj,
+		struct kobj_attribute *attr,
+		const char *buf, size_t count)
 {
 	struct dsi_display *display = get_main_display();
 	int temp_save = 0;
@@ -2839,10 +2812,11 @@ int oplus_display_set_failsafe(void *buf)
 		return ret;
 	}
 
-	return 0;
+	return count;
 }
 
-int oplus_display_get_failsafe(void *buf)
+static ssize_t oplus_display_get_failsafe(struct kobject *obj,
+		struct kobj_attribute *attr, char *buf)
 {
 	printk(KERN_INFO "oplus_display_get_failsafe = %d\n", failsafe_mode);
 	return sprintf(buf, "%d\n", failsafe_mode);
@@ -3636,6 +3610,8 @@ static OPLUS_ATTR(video, S_IRUGO|S_IWUSR, oplus_display_get_video, oplus_display
 
 static OPLUS_ATTR(dsi_cmd_log_switch, S_IRUGO | S_IWUSR, oplus_display_get_dsi_cmd_log_switch,
                         oplus_display_set_dsi_cmd_log_switch);
+static OPLUS_ATTR(failsafe, S_IRUGO | S_IWUSR, oplus_display_get_failsafe,
+						oplus_display_set_failsafe);
 
 /*
  * Create a group of attributes so that we can create and destroy them all
@@ -3683,6 +3659,7 @@ static struct attribute *oplus_display_attrs[] = {
 	&oplus_attr_video.attr,
 #endif /* OPLUS_FEATURE_AOD_RAMLESS */
 	&oplus_attr_dsi_cmd_log_switch.attr,
+	&oplus_attr_failsafe.attr,
 
 	NULL,	/* need to NULL terminate the list of attributes */
 };

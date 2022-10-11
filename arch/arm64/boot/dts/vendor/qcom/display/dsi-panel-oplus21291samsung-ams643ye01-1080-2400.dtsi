@@ -15,6 +15,7 @@
 		qcom,mdss-dsi-panel-name =
 		  "samsung ams643ye01 amoled fhd+ panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-physical-type = "oled";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-bpp = <24>;
@@ -48,8 +49,8 @@
 			16000 13250 34500 7500 3000>;
 		qcom,mdss-dsi-panel-peak-brightness = <4300000>;
 		qcom,mdss-dsi-panel-blackness-level = <1023>;
-		qcom,mdss-pan-physical-width-dimension = <68>;
-		qcom,mdss-pan-physical-height-dimension = <152>;
+		qcom,mdss-pan-physical-width-dimension = <67>;
+		qcom,mdss-pan-physical-height-dimension = <149>;
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-check-mode = "reg_read";
 		qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 02 0A 00
@@ -73,8 +74,8 @@
 				qcom,mdss-dsi-v-front-porch = <8>;
 				qcom,mdss-dsi-v-pulse-width = <4>;
 				qcom,mdss-dsi-panel-framerate = <60>;
-				oplus,fod-on-vblank = <0>;
-				oplus,fod-off-vblank = <1>;
+				oplus,fod-on-vblank = <1>;
+				oplus,fod-off-vblank = <0>;
 
 				qcom,mdss-dsi-on-command = [
 					/*PPS Setting*/
@@ -125,6 +126,11 @@
 					39 01 00 00 00 00 02 F7 0F
 					39 01 00 00 00 00 03 F0 A5 A5
 					15 01 00 00 00 00 02 53 20
+					/*ELVSS Offset Setting*/
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 B4 63
+					39 01 00 00 00 00 0C 63 EA FE DF F0 FF 3F F6 FF 9F FC FF
+					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-post-on-backlight = [
 					39 01 00 00 00 00 03 F0 5A 5A
@@ -152,10 +158,12 @@
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command = [
-					/*HBM OFF */
+					/* AOD CTRL setting */
 					39 00 00 00 00 00 03 F0 5A 5A
-					39 00 00 00 00 00 03 B0 02 90
-					15 00 00 00 00 00 02 90 1C
+					39 00 00 00 00 00 05 BB 11 0C 50 10
+					39 01 00 00 00 00 03 F0 A5 A5
+					/* AOD off */
+					39 00 00 00 00 00 03 F0 5A 5A
 					39 00 00 00 00 00 02 91 02
 					15 00 00 00 00 00 02 53 20
 					39 01 00 00 00 00 03 F0 A5 A5
@@ -167,60 +175,53 @@
 					15 01 00 00 00 00 02 53 25
 				];
 				qcom,mdss-dsi-aod-hbm-on-command = [
+					/* AOD CTRL setting */
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 05 BB 11 0C 50 10
+					39 01 00 00 00 00 03 F0 A5 A5
 					/* AOD off */
 					39 00 00 00 00 00 03 F0 5A 5A
 					39 00 00 00 00 00 02 91 02
 					15 00 00 00 00 00 02 53 20
-					39 00 00 00 00 00 03 F0 A5 A5
-					/* HBM Mode ON */
-					39 00 00 00 00 00 03 F0 5A 5A
-					39 00 00 00 00 00 03 B0 02 90
-					15 00 00 00 00 00 02 90 14
-					/* 0xE0 Normal transition */
-					39 00 00 00 00 00 02 53 E0
-					39 00 00 00 00 00 03 51 0F FF
 					39 01 00 00 00 00 03 F0 A5 A5
+					/*ELVSS DIMING OFF,DLY OFF*/
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 03 B0 91 63
+					15 00 00 00 00 00 02 63 20
+					39 01 00 00 00 00 03 F0 A5 A5
+					/* HBM Mode ON */
+					39 00 00 00 00 00 02 53 E0
+					39 01 00 00 00 00 03 51 0F FF
 				];
 				qcom,mdss-dsi-hbm-on-command = [
-					/* HBM Mode ON */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 02 90
-					15 01 00 00 00 00 02 90 14
-					/* 0xE0 Normal transition */
+					/*ELVSS DIMING OFF,DLY ON*/
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 03 B0 91 63
+					15 00 00 00 00 00 02 63 00
+					39 01 00 00 00 00 03 F0 A5 A5
 					39 01 00 00 00 00 02 53 E0
 					39 01 00 00 00 00 03 51 0F FF
-					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-normal-hbm-on-command = [
-					/* HBM Mode ON */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 02 90
-					15 01 00 00 00 00 02 90 14
-					/* 0xE0 Normal transition */
 					39 01 00 00 00 00 02 53 E0
 					39 01 00 00 00 00 03 51 0F FF
-					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-hbm-off-command = [
-					/*HBM OFF */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 02 90
-					15 01 00 00 00 00 02 90 1C
-					15 01 00 00 00 00 02 53 20
+					/*ELVSS DIMING OFF,DLY ON*/
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 03 B0 91 63
+					15 00 00 00 00 00 02 63 00
 					39 01 00 00 00 00 03 F0 A5 A5
+					15 01 00 00 00 00 02 53 20
 				];
 				qcom,mdss-dsi-aod-hbm-off-command = [
 					/*HBM OFF */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 02 90
-					15 01 00 00 00 00 02 90 1C
-					15 01 00 00 00 00 02 53 24
-					39 01 00 00 00 00 03 F0 A5 A5
+					15 01 00 00 00 00 02 53 20
 					/*AOD on */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 02 91 01
-					15 01 00 00 00 00 02 53 24
-					15 01 00 00 00 00 02 BB 1D
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 02 91 01
+					15 00 00 00 00 00 02 53 24
+					15 00 00 00 00 00 02 BB 1D
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-seed-off-command = [
@@ -290,19 +291,14 @@
 					39 01 00 00 00 00 03 FC A5 A5
 				];
 				qcom,mdss-dsi-hbm-enter-switch-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 11 00 03 51 07 FF
-					39 01 00 00 00 00 03 91 02 00
+					//39 00 00 00 00 00 03 F0 5A 5A
 					15 00 00 00 00 00 02 53 E0
-					39 01 00 00 00 00 03 51 08 00
-					39 01 00 00 00 00 03 F0 A5 A5
+					//39 00 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-hbm-exit-switch-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
+					//39 00 00 00 00 00 03 F0 5A 5A
 					15 00 00 00 00 00 02 53 20
-					39 01 00 00 11 00 03 51 07 FF
-					39 00 00 00 00 00 03 91 02 01
-					39 01 00 00 00 00 03 F0 A5 A5
+					//39 00 00 00 00 00 03 F0 A5 A5
 				];
 
 				qcom,mdss-dsi-aod-hbm-on-command-state = "dsi_hs_mode";
@@ -338,8 +334,8 @@
 				qcom,mdss-dsi-v-front-porch = <8>;
 				qcom,mdss-dsi-v-pulse-width = <4>;
 				qcom,mdss-dsi-panel-framerate = <90>;
-				oplus,fod-on-vblank = <0>;
-				oplus,fod-off-vblank = <1>;
+				oplus,fod-on-vblank = <1>;
+				oplus,fod-off-vblank = <0>;
 				qcom,mdss-dsi-on-command = [
 					/*PPS Setting*/
 					39 01 00 00 00 00 81 9E
@@ -389,6 +385,11 @@
 					39 01 00 00 00 00 02 F7 0F
 					39 01 00 00 00 00 03 F0 A5 A5
 					15 01 00 00 00 00 02 53 20
+					/*ELVSS Offset Setting*/
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 B4 63
+					39 01 00 00 00 00 0C 63 EA FE DF F0 FF 3F F6 FF 9F FC FF
+					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-post-on-backlight = [
 					/* Display On*/
@@ -414,10 +415,12 @@
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command = [
-					/*HBM OFF */
+					/* AOD CTRL setting */
 					39 00 00 00 00 00 03 F0 5A 5A
-					39 00 00 00 00 00 03 B0 02 90
-					15 00 00 00 00 00 02 90 1C
+					39 00 00 00 00 00 05 BB 11 0C 50 10
+					39 01 00 00 00 00 03 F0 A5 A5
+					/* AOD off */
+					39 00 00 00 00 00 03 F0 5A 5A
 					39 00 00 00 00 00 02 91 02
 					15 00 00 00 00 00 02 53 20
 					39 01 00 00 00 00 03 F0 A5 A5
@@ -429,60 +432,53 @@
 					15 01 00 00 00 00 02 53 25
 				];
 				qcom,mdss-dsi-aod-hbm-on-command = [
+					/* AOD CTRL setting */
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 05 BB 11 0C 50 10
+					39 01 00 00 00 00 03 F0 A5 A5
 					/* AOD off */
 					39 00 00 00 00 00 03 F0 5A 5A
 					39 00 00 00 00 00 02 91 02
 					15 00 00 00 00 00 02 53 20
-					39 00 00 00 00 00 03 F0 A5 A5
-					/* HBM Mode ON */
-					39 00 00 00 00 00 03 F0 5A 5A
-					39 00 00 00 00 00 03 B0 02 90
-					15 00 00 00 00 00 02 90 14
-					/* 0xE0 Normal transition */
-					39 00 00 00 00 00 02 53 E0
-					39 00 00 00 00 00 03 51 0F FF
 					39 01 00 00 00 00 03 F0 A5 A5
+					/*ELVSS DIMING OFF,DLY OFF*/
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 03 B0 91 63
+					15 00 00 00 00 00 02 63 20
+					39 01 00 00 00 00 03 F0 A5 A5
+					/* HBM Mode ON */
+					39 00 00 00 00 00 02 53 E0
+					39 01 00 00 00 00 03 51 0F FF
 				];
 				qcom,mdss-dsi-hbm-on-command = [
-					/* HBM Mode ON */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 02 90
-					15 01 00 00 00 00 02 90 14
-					/* 0xE0 Normal transition */
+					/*ELVSS DIMING OFF,DLY OFF*/
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 03 B0 91 63
+					15 00 00 00 00 00 02 63 20
+					39 01 00 00 00 00 03 F0 A5 A5
 					39 01 00 00 00 00 02 53 E0
 					39 01 00 00 00 00 03 51 0F FF
-					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-normal-hbm-on-command = [
-					/* HBM Mode ON */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 02 90
-					15 01 00 00 00 00 02 90 14
-					/* 0xE0 Normal transition */
 					39 01 00 00 00 00 02 53 E0
 					39 01 00 00 00 00 03 51 0F FF
-					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-hbm-off-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 02 90
-					15 01 00 00 00 00 02 90 1C
-					39 01 00 00 00 00 02 91 02
-					15 01 00 00 00 00 02 53 20
+					/*ELVSS DIMING OFF,DLY ON*/
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 03 B0 91 63
+					15 00 00 00 00 00 02 63 00
 					39 01 00 00 00 00 03 F0 A5 A5
+					15 01 00 00 00 00 02 53 20
 				];
 				qcom,mdss-dsi-aod-hbm-off-command = [
 					/*HBM OFF */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 02 90
-					15 01 00 00 00 00 02 90 1C
-					15 01 00 00 00 00 02 53 25
-					39 01 00 00 00 00 03 F0 A5 A5
+					15 01 00 00 00 00 02 53 20
 					/*AOD on */
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 02 91 01
-					15 01 00 00 00 00 02 53 25
-					15 01 00 00 00 00 02 BB 1D
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 02 91 01
+					15 00 00 00 00 00 02 53 24
+					15 00 00 00 00 00 02 BB 1D
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-seed-off-command = [
@@ -552,19 +548,14 @@
 					39 01 00 00 00 00 03 FC A5 A5
 				];
 				qcom,mdss-dsi-hbm-enter-switch-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 0C 00 03 51 07 FF
-					39 01 00 00 00 00 03 91 02 00
+					//39 00 00 00 00 00 03 F0 5A 5A
 					15 00 00 00 00 00 02 53 E0
-					39 01 00 00 00 00 03 51 08 00
-					39 01 00 00 00 00 03 F0 A5 A5
+					//39 00 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-hbm-exit-switch-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
+					//39 00 00 00 00 00 03 F0 5A 5A
 					15 00 00 00 00 00 02 53 20
-					39 01 00 00 0C 00 03 51 07 FF
-					39 00 00 00 00 00 03 91 02 01
-					39 01 00 00 00 00 03 F0 A5 A5
+					//39 00 00 00 00 00 03 F0 A5 A5
 				];
 
 				qcom,mdss-dsi-aod-hbm-on-command-state = "dsi_hs_mode";
@@ -590,3 +581,27 @@
 	};
 };
 
+&dsi_oplus21291samsung_ams643ye01_1080_2400_cmd {
+	oplus,dsi-fod-brightness =
+		<4 0xEB>,
+		<50 0xEA>,
+		<100 0xE6>,
+		<170 0xE3>,
+		<204 0xE2>,
+		<251 0xDE>,
+		<279 0xDB>,
+		<311 0xD8>,
+		<361 0xD5>,
+		<398 0xD1>,
+		<505 0xC7>,
+		<609 0xBD>,
+		<702 0xB3>,
+		<798 0xA9>,
+		<898 0x9F>,
+		<1004 0x94>,
+		<1203 0x7F>,
+		<1405 0x69>,
+		<1610 0x54>,
+		<1802 0x3F>,
+		<2047 0x23>;
+};

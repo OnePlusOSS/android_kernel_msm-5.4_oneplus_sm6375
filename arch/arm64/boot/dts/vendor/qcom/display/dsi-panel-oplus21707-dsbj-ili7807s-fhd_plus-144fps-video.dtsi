@@ -311,8 +311,10 @@
 	qcom,mdss-dsi-bl-normal-max-level = <3320>;
 	qcom,mdss-brightness-normal-max-level = <3320>;
 	qcom,mdss-brightness-default-level = <891>;
+	qcom,bl-dsc-cmd-state = "dsi_lp_mode";
 	qcom,platform-te-gpio = <&tlmm 23 0>;
 	qcom,platform-reset-gpio = <&tlmm 100 0>;
+	qcom,platform-reset-gpio-always-on;
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 		"src_byte_clk0", "src_pixel_clk0",
 		"shadow_byte_clk0", "shadow_pixel_clk0";

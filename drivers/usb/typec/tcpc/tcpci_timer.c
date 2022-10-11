@@ -31,7 +31,7 @@
 #define RT_MASK64(i)	(((uint64_t)1) << i)
 
 #define TIMEOUT_VAL(val)	(val * 1000)
-#define TIMEOUT_RANGE(min, max)		((min * 4000 + max * 1000)/5)
+#define TIMEOUT_RANGE(min, max)		((min * 2000 + max * 3000)/5)
 #define TIMEOUT_VAL_US(val)	(val)
 
 /* Debug message Macro */
@@ -369,6 +369,8 @@ static inline void on_pe_timer_timeout(
 		struct tcpc_device *tcpc, uint32_t timer_id)
 {
 	struct pd_event pd_event = {0};
+	int rv;
+	uint32_t chip_id;
 
 	pd_event.event_type = PD_EVT_TIMER_MSG;
 	pd_event.msg = timer_id;
@@ -426,6 +428,13 @@ static inline void on_pe_timer_timeout(
 		pd_put_pe_event(&tcpc->pd_port, PD_PE_IDLE);
 		break;
 
+	case PD_TIMER_HARD_RESET_COMPLETE:
+		rv = tcpci_get_chip_id(tcpc, &chip_id);
+		if (!rv &&  SC2150A_DID == chip_id) {
+			pd_put_sent_hard_reset_event(tcpc);
+			break;
+		}
+		fallthrough;
 	default:
 		pd_put_event(tcpc, &pd_event, false);
 		break;
@@ -1384,7 +1393,8 @@ int tcpci_timer_init(struct tcpc_device *tcpc)
 
 int tcpci_timer_deinit(struct tcpc_device *tcpc)
 {
-	kthread_stop(tcpc->timer_task);
+	if (!IS_ERR_OR_NULL(tcpc->timer_task))
+		kthread_stop(tcpc->timer_task);
 	mutex_lock(&tcpc->timer_lock);
 	tcpc_reset_timer_range(tcpc, 0, PD_TIMER_NR);
 	mutex_unlock(&tcpc->timer_lock);

@@ -180,9 +180,13 @@ int cam_flash_i2c_power_ops(struct cam_flash_ctrl *fctrl,
 			}
 		}
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-	wl2868c_set_ldo_value(WL2868C_VDDOIS,1800);
-	wl2868c_set_en_ldo(WL2868C_VDDOIS,1);
-	CAM_ERR(CAM_FLASH,"FTM flash powerup CCI");
+		if (!fctrl->pmic_pm8008) {
+			rc = wl2868c_ldo_enable(EXT_LDO6, 1800);
+			if (rc) {
+				CAM_ERR(CAM_FLASH,"FTM flash powerup CCI fail");
+				goto free_pwr_settings;
+			}
+		}
 #endif /* OPLUS_FEATURE_CAMERA_COMMON*/
 		rc = cam_sensor_core_power_up(power_info, soc_info);
 		if (rc) {
@@ -203,7 +207,9 @@ int cam_flash_i2c_power_ops(struct cam_flash_ctrl *fctrl,
 
 		rc = cam_sensor_util_power_down(power_info, soc_info);
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-		wl2868c_set_en_ldo(WL2868C_VDDOIS,0);
+		if (!fctrl->pmic_pm8008) {
+			wl2868c_ldo_disable(EXT_LDO6, 0);
+		}
 #endif /* OPLUS_FEATURE_CAMERA_COMMON*/
 		if (rc) {
 			CAM_ERR(CAM_FLASH, "power down the core is failed:%d",
