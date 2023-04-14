@@ -242,12 +242,12 @@ config CRYPTO_DH
 
 config CRYPTO_ECC
 	tristate
+	select CRYPTO_RNG_DEFAULT
 
 config CRYPTO_ECDH
 	tristate "ECDH algorithm"
 	select CRYPTO_ECC
 	select CRYPTO_KPP
-	select CRYPTO_RNG_DEFAULT
 	help
 	  Generic implementation of the ECDH algorithm
 
@@ -1743,6 +1743,15 @@ config CRYPTO_LZ4
 	help
 	  This is the LZ4 algorithm.
 
+config CRYPTO_NAN_SHAN
+	tristate "NAN_SHAN compression algorithm"
+	select CRYPTO_ALGAPI
+	select CRYPTO_ACOMP2
+	select NAN_SHAN_COMPRESS
+	select NAN_SHAN_DECOMPRESS
+	help
+	  This is the NAN_SHAN algorithm.
+
 config CRYPTO_LZ4HC
 	tristate "LZ4HC compression algorithm"
 	select CRYPTO_ALGAPI
@@ -1874,7 +1883,6 @@ config CRYPTO_STATS
 config CRYPTO_HASH_INFO
 	bool
 
-source "lib/crypto/Kconfig"
 source "drivers/crypto/Kconfig"
 source "crypto/asymmetric_keys/Kconfig"
 source "certs/Kconfig"

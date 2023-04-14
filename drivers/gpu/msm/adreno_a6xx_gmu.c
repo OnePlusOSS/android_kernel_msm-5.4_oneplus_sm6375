@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/clk/qcom.h>
 #include <linux/component.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
@@ -33,6 +34,27 @@
 
 #define ARC_VOTE_SET(pri, sec, vlvl) \
 	((((vlvl) & 0xFFFF) << 16) | (((sec) & 0xFF) << 8) | ((pri) & 0xFF))
+
+static const char * const clocks[] = {
+	"src_clk",
+	"core_clk",
+	"iface_clk",
+	"mem_clk",
+	"mem_iface_clk",
+	"alt_mem_iface_clk",
+	"rbbmtimer_clk",
+	"gtcu_clk",
+	"gtbu_clk",
+	"gtcu_iface_clk",
+	"alwayson_clk",
+	"isense_clk",
+	"rbcpr_clk",
+	"iref_clk",
+	"gmu_clk",
+	"ahb_clk",
+	"smmu_vote",
+	"apb_pclk",
+};
 
 static struct gmu_vma_entry a6xx_gmu_vma_legacy[] = {
 	[GMU_ITCM] = {
@@ -936,7 +958,7 @@ int a6xx_gmu_sptprac_enable(struct adreno_device *adreno_dev)
 			SPTPRAC_POWERON_STATUS_MASK,
 			SPTPRAC_CTRL_TIMEOUT,
 			SPTPRAC_POWERON_STATUS_MASK)) {
-		dev_err(&gmu->pdev->dev, "power on SPTPRAC fail\n");
+		dev_err(&gmu->pdev->dev, "power on SPTPRAC fail - non-holi\n");
 		gmu_fault_snapshot(device);
 		return -ETIMEDOUT;
 	}
@@ -951,6 +973,9 @@ int a6xx_gmu_sptprac_enable(struct adreno_device *adreno_dev)
 int a6xx_holi_gmu_sptprac_enable(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	unsigned int val1, val2;
+	int i;
 	u32 val;
 	void __iomem *addr = adreno_dev->gmu_wrapper_virt +
 				(A6XX_GMU_SPTPRAC_PWR_CLK_STATUS << 2) -
@@ -961,6 +986,24 @@ int a6xx_holi_gmu_sptprac_enable(struct adreno_device *adreno_dev)
 
 	if (readl_poll_timeout(addr, val, (val & SPTPRAC_POWERON_STATUS_MASK) ==
 		SPTPRAC_POWERON_STATUS_MASK, 10, 10 * 1000)) {
+		adreno_read_gmu_wrapper(adreno_dev,
+			A6XX_GMU_GX_SPTPRAC_POWER_CONTROL, &val1);
+		adreno_read_gmu_wrapper(adreno_dev,
+			A6XX_GMU_SPTPRAC_PWR_CLK_STATUS, &val2);
+		dev_err(device->dev,
+			"power on SPTPRAC fail PWR_CONTROL = 0x%x PWR_CLK_STATUS = 0x%x\n",
+				val1, val2);
+
+		for (i = KGSL_MAX_CLKS - 1; i > 0; i--) {
+			if (!strcmp(clocks[i], "core_clk"))
+				qcom_clk_dump(pwr->grp_clks[i], pwr->gx_gdsc, false);
+			else if (!strcmp(clocks[i], "gmu_clk"))
+				qcom_clk_dump(pwr->grp_clks[i], pwr->cx_gdsc, false);
+			else
+				qcom_clk_dump(pwr->grp_clks[i], NULL, false);
+		}
+
+		kgsl_device_snapshot(device, NULL, false);
 		dev_err(device->dev, "power on SPTPRAC fail\n");
 		return -ETIMEDOUT;
 	}
@@ -2231,9 +2274,6 @@ static int a6xx_gmu_first_boot(struct adreno_device *adreno_dev)
 
 	device->gmu_fault = false;
 
-	if (ADRENO_FEATURE(adreno_dev, ADRENO_BCL))
-		adreno_dev->bcl_enabled = true;
-
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_AWARE);
 
 	return 0;
@@ -3021,6 +3061,17 @@ static int a6xx_first_boot(struct adreno_device *adreno_dev)
 
 	set_bit(GMU_PRIV_FIRST_BOOT_DONE, &gmu->flags);
 	set_bit(GMU_PRIV_GPU_STARTED, &gmu->flags);
+
+	/*
+	 * BCL needs respective Central Broadcast register to
+	 * be programed from TZ. This programing happens only
+	 * when zap shader firmware load is successful. Zap firmware
+	 * load can fail in boot up path hence enable BCL only after we
+	 * successfully complete first boot to ensure that Central
+	 * Broadcast register was programed before enabling BCL.
+	 */
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_BCL))
+		adreno_dev->bcl_enabled = true;
 
 	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;

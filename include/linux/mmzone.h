@@ -31,6 +31,17 @@
 #endif
 #define MAX_ORDER_NR_PAGES (1 << (MAX_ORDER - 1))
 
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+#define FREE_AREA_COUNTS 4
+#endif
+
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+struct page_label {
+    unsigned long label;
+    unsigned long segment;
+};
+#endif
+
 /*
  * PAGE_ALLOC_COSTLY_ORDER is the order at which allocations are deemed
  * costly to service.  That is between allocation orders which should
@@ -214,6 +225,11 @@ enum zone_stat_item {
 	NR_ZSPAGES,		/* allocated in zsmalloc */
 #endif
 	NR_FREE_CMA_PAGES,
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+        NR_IONCACHE_PAGES,
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 	NR_VM_ZONE_STAT_ITEMS };
 
 enum node_stat_item {
@@ -335,10 +351,17 @@ enum zone_watermarks {
 	NR_WMARK
 };
 
+#ifndef OPLUS_FEATURE_PERFORMANCE
 #define min_wmark_pages(z) (z->_watermark[WMARK_MIN] + z->watermark_boost)
 #define low_wmark_pages(z) (z->_watermark[WMARK_LOW] + z->watermark_boost)
 #define high_wmark_pages(z) (z->_watermark[WMARK_HIGH] + z->watermark_boost)
 #define wmark_pages(z, i) (z->_watermark[i] + z->watermark_boost)
+#else
+#define min_wmark_pages(z) (z->_watermark[WMARK_MIN] + z->watermark_boost/2)
+#define low_wmark_pages(z) (z->_watermark[WMARK_LOW] + z->watermark_boost/2)
+#define high_wmark_pages(z) (z->_watermark[WMARK_HIGH] + z->watermark_boost)
+#define wmark_pages(z, i) (z->_watermark[i] + (((i) == WMARK_HIGH) ? (z->watermark_boost) : (z->watermark_boost / 2)))
+#endif
 
 struct per_cpu_pages {
 	int count;		/* number of pages in the list */
@@ -504,6 +527,9 @@ struct zone {
 	atomic_long_t		managed_pages;
 	unsigned long		spanned_pages;
 	unsigned long		present_pages;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    struct page_label zone_label[FREE_AREA_COUNTS];
+#endif
 
 	const char		*name;
 
@@ -527,7 +553,11 @@ struct zone {
 	ZONE_PADDING(_pad1_)
 
 	/* free areas of different sizes */
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+	struct free_area	free_area[FREE_AREA_COUNTS][MAX_ORDER];
+#else
 	struct free_area	free_area[MAX_ORDER];
+#endif
 
 	/* zone flags, see below */
 	unsigned long		flags;
@@ -759,6 +789,9 @@ typedef struct pglist_data {
 
 	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
 
+#ifdef CONFIG_HYBRIDSWAP
+    u64 android_oem_data1;
+#endif
 #ifdef CONFIG_COMPACTION
 	int kcompactd_max_order;
 	enum zone_type kcompactd_classzone_idx;
@@ -953,6 +986,16 @@ static inline int is_highmem_idx(enum zone_type idx)
 	return 0;
 #endif
 }
+
+
+#ifdef CONFIG_ZONE_DMA
+bool has_managed_dma(void);
+#else
+static inline bool has_managed_dma(void)
+{
+	return false;
+}
+#endif
 
 /**
  * is_highmem - helper function to quickly check if a struct zone is a
@@ -1269,13 +1312,16 @@ static inline unsigned long *section_to_usemap(struct mem_section *ms)
 
 static inline struct mem_section *__nr_to_section(unsigned long nr)
 {
+	unsigned long root = SECTION_NR_TO_ROOT(nr);
+
+	if (unlikely(root >= NR_SECTION_ROOTS))
+		return NULL;
+
 #ifdef CONFIG_SPARSEMEM_EXTREME
-	if (!mem_section)
+	if (!mem_section || !mem_section[root])
 		return NULL;
 #endif
-	if (!mem_section[SECTION_NR_TO_ROOT(nr)])
-		return NULL;
-	return &mem_section[SECTION_NR_TO_ROOT(nr)][nr & SECTION_ROOT_MASK];
+	return &mem_section[root][nr & SECTION_ROOT_MASK];
 }
 extern unsigned long __section_nr(struct mem_section *ms);
 extern size_t mem_section_usage_size(void);
@@ -1484,7 +1530,6 @@ static inline bool memmap_valid_within(unsigned long pfn,
 	return true;
 }
 #endif /* CONFIG_ARCH_HAS_HOLES_MEMORYMODEL */
-
 #endif /* !__GENERATING_BOUNDS.H */
 #endif /* !__ASSEMBLY__ */
 #endif /* _LINUX_MMZONE_H */

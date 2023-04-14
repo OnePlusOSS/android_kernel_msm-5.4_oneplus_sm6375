@@ -776,7 +776,7 @@ static int cpu_power_select(struct cpuidle_device *dev,
 	}
 
 done_select:
-	trace_cpu_power_select(best_level, sleep_us, latency_us, 0);
+	trace_cpu_power_select(best_level, sleep_us, latency_us, cpu->bias);
 
 	trace_cpu_pred_select(idx_restrict_time ? 2 : (ipi_predicted ?
 				3 : (predicted ? 1 : 0)), predicted, htime);
@@ -1117,6 +1117,10 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		 * LPMs (XO and Vmin).
 		 */
 		if (!from_idle) {
+			#ifdef CONFIG_OPLUS_POWER_UTIL
+			extern void oplus_get_clk_stats(void);
+			oplus_get_clk_stats();
+			#endif
 			clock_debug_print_enabled();
 			regulator_debug_print_enabled();
 		}

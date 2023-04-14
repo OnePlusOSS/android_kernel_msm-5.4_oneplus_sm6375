@@ -12,6 +12,10 @@
 
 #include <trace/events/sched.h>
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_slide.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
 const char *task_event_names[] = {"PUT_PREV_TASK", "PICK_NEXT_TASK",
 				  "TASK_WAKE", "TASK_MIGRATE", "TASK_UPDATE",
 				"IRQ_UPDATE"};
@@ -597,6 +601,9 @@ static inline u64 freq_policy_load(struct rq *rq)
 			load = div64_u64(load * sysctl_sched_user_hint,
 					 (u64)100);
 	}
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	slide_set_boost_load(&load, cpu_of(rq));
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 done:
 	trace_sched_load_to_gov(rq, aggr_grp_load, tt_load, sched_freq_aggr_en,

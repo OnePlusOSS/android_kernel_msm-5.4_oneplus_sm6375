@@ -6,8 +6,16 @@
 #include <linux/sched.h>
 #include <linux/spinlock.h>
 
+//#ifdef OPLUS_BUG_STABILITY
+//debug enable CONFIG_SLUB_DEBUG_PANIC_ON not limit
+#ifdef CONFIG_SLUB_DEBUG_PANIC_ON
+#define DEFAULT_RATELIMIT_INTERVAL	(0 * HZ)
+#define DEFAULT_RATELIMIT_BURST		20000
+#else
 #define DEFAULT_RATELIMIT_INTERVAL	(5 * HZ)
 #define DEFAULT_RATELIMIT_BURST		10
+#endif /*CONFIG_SLUB_DEBUG_PANIC_ON*/
+//#endif /*OPLUS_BUG_STABILITY*/
 
 /* issue num suppressed message on exit */
 #define RATELIMIT_MSG_ON_RELEASE	BIT(0)
@@ -23,11 +31,15 @@ struct ratelimit_state {
 	unsigned long	flags;
 };
 
-#define RATELIMIT_STATE_INIT(name, interval_init, burst_init) {		\
-		.lock		= __RAW_SPIN_LOCK_UNLOCKED(name.lock),	\
-		.interval	= interval_init,			\
-		.burst		= burst_init,				\
+#define RATELIMIT_STATE_INIT_FLAGS(name, interval_init, burst_init, flags_init) { \
+		.lock		= __RAW_SPIN_LOCK_UNLOCKED(name.lock),		  \
+		.interval	= interval_init,				  \
+		.burst		= burst_init,					  \
+		.flags		= flags_init,					  \
 	}
+
+#define RATELIMIT_STATE_INIT(name, interval_init, burst_init) \
+	RATELIMIT_STATE_INIT_FLAGS(name, interval_init, burst_init, 0)
 
 #define RATELIMIT_STATE_INIT_DISABLED					\
 	RATELIMIT_STATE_INIT(ratelimit_state, 0, DEFAULT_RATELIMIT_BURST)

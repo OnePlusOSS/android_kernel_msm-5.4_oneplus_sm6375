@@ -13,21 +13,32 @@
 enum psi_task_count {
 	NR_IOWAIT,
 	NR_MEMSTALL,
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+        /* UX task in memstall */
+        NR_UXMEMSTALL,
+#endif
 	NR_RUNNING,
-	NR_PSI_TASK_COUNTS = 3,
+	NR_PSI_TASK_COUNTS,
 };
 
 /* Task state bitmasks */
 #define TSK_IOWAIT	(1 << NR_IOWAIT)
 #define TSK_MEMSTALL	(1 << NR_MEMSTALL)
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#define TSK_UXMEMSTALL	(1 << NR_UXMEMSTALL)
+#endif
 #define TSK_RUNNING	(1 << NR_RUNNING)
 
 /* Resources that workloads could be stalled on */
 enum psi_res {
 	PSI_IO,
 	PSI_MEM,
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+        /* UX task in memstall */
+        PSI_UXMEM,
+#endif
 	PSI_CPU,
-	NR_PSI_RESOURCES = 3,
+	NR_PSI_RESOURCES,
 };
 
 /*
@@ -41,10 +52,15 @@ enum psi_states {
 	PSI_IO_FULL,
 	PSI_MEM_SOME,
 	PSI_MEM_FULL,
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+        /* UX task in memstall */
+        PSI_UXMEM_SOME,
+        PSI_UXMEM_FULL,
+#endif
 	PSI_CPU_SOME,
 	/* Only per-CPU, to weigh the CPU in the global average: */
 	PSI_NONIDLE,
-	NR_PSI_STATES = 6,
+	NR_PSI_STATES,
 };
 
 enum psi_aggregators {
@@ -120,9 +136,6 @@ struct psi_trigger {
 	 * events to one per window
 	 */
 	u64 last_event_time;
-
-	/* Refcounting to prevent premature destruction */
-	struct kref refcount;
 };
 
 struct psi_group {

@@ -1,0 +1,6 @@
+config INPUT_HALL_SENSOR
+	tristate "support hall sensor for wireless pen"
+	depends on INPUT
+	select INPUT_KEYCOMBO
+	---help---
+	  Set Y here and a list of supported hall sensor will be displayed;

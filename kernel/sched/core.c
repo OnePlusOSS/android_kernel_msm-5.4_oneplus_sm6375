@@ -31,6 +31,22 @@
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/sched.h>
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_common.h>
+#include <../special_opt/special_opt.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_slide.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+#ifdef CONFIG_LOCKING_PROTECT
+#include <linux/sched_assist/sched_assist_locking.h>
+#endif
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+#include <linux/task_sched_info.h>
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
@@ -42,6 +58,10 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(pelt_dl_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(pelt_irq_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(pelt_se_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_overutilized_tp);
+
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+#include "../../drivers/soc/oplus/game_opt/game_ctrl.h"
+#endif
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 EXPORT_SYMBOL_GPL(runqueues);
@@ -1364,7 +1384,7 @@ static void __init init_uclamp_rq(struct rq *rq)
 		};
 	}
 
-	rq->uclamp_flags = 0;
+	rq->uclamp_flags = UCLAMP_FLAG_IDLE;
 }
 
 static void __init init_uclamp(void)
@@ -1554,6 +1574,11 @@ static inline void check_class_changed(struct rq *rq, struct task_struct *p,
 void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 {
 	const struct sched_class *class;
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_MMAP_LOCK_OPT)
+	//if (skip_check_preempt_curr(rq, p, flags))
+	//	return;
+#endif
 
 	if (p->sched_class == rq->curr->sched_class) {
 		rq->curr->sched_class->check_preempt_curr(rq, p, flags);
@@ -2591,6 +2616,9 @@ out:
 
 bool cpus_share_cache(int this_cpu, int that_cpu)
 {
+	if (this_cpu == that_cpu)
+		return true;
+
 	return per_cpu(sd_llc_id, this_cpu) == per_cpu(sd_llc_id, that_cpu);
 }
 #endif /* CONFIG_SMP */
@@ -2745,6 +2773,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 		success = 1;
 		cpu = task_cpu(p);
 		trace_sched_waking(p);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+		update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 		p->state = TASK_RUNNING;
 		trace_sched_wakeup(p);
 		goto out;
@@ -2762,6 +2793,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 		goto unlock;
 
 	trace_sched_waking(p);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 	/* We're going to change ->state: */
 	success = 1;
@@ -2833,6 +2867,10 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 		delayacct_blkio_end(p);
 		atomic_dec(&task_rq(p)->nr_iowait);
 	}
+
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+	g_rt_try_to_wake_up(p);
+#endif
 
 	cpu = select_task_rq(p, p->wake_cpu, SD_BALANCE_WAKE, wake_flags,
 			     sibling_count_hint);
@@ -3203,6 +3241,9 @@ void wake_up_new_task(struct task_struct *p)
 
 	mark_task_starting(p);
 	activate_task(rq, p, ENQUEUE_NOCLOCK);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	trace_sched_wakeup_new(p);
 	check_preempt_curr(rq, p, WF_FORK);
 #ifdef CONFIG_SMP
@@ -3489,6 +3530,10 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 		 * task and put them back on the free list.
 		 */
 		kprobe_flush_task(prev);
+
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+		g_rt_task_dead(prev);
+#endif
 
 		walt_task_dead(prev);
 		/* Task is done with its stack. */
@@ -3864,6 +3909,9 @@ void scheduler_tick(void)
 	if (early_notif)
 		flag = SCHED_CPUFREQ_WALT | SCHED_CPUFREQ_EARLY_DET;
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	slide_calc_boost_load(rq, &flag, cpu);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	cpufreq_update_util(rq, flag);
 	rq_unlock(rq, &rf);
 
@@ -3871,7 +3919,13 @@ void scheduler_tick(void)
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+    if(!specopt_skip_balance()) {
+	    trigger_load_balance(rq);
+    }
+#else
 	trigger_load_balance(rq);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 #endif
 
 	rcu_read_lock();
@@ -4282,6 +4336,10 @@ restart:
  *
  * WARNING: must be called with preemption disabled!
  */
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern void ux_state_systrace_c(unsigned int cpu, struct task_struct *p);
+extern void sa_scene_systrace_c(void);
+#endif
 static void __sched notrace __schedule(bool preempt)
 {
 	struct task_struct *prev, *next;
@@ -4333,6 +4391,10 @@ static void __sched notrace __schedule(bool preempt)
 		switch_count = &prev->nvcsw;
 	}
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	prev->enqueue_time = rq->clock;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
 	next = pick_next_task(rq, prev, &rf);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
@@ -4369,6 +4431,15 @@ static void __sched notrace __schedule(bool preempt)
 		++*switch_count;
 
 		trace_sched_switch(preempt, prev, next);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+		ux_state_systrace_c(cpu_of(rq), next);
+		sa_scene_systrace_c();
+#endif
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+		update_wake_tid(prev, next, running_runnable);
+		update_running_start_time(prev, next);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
@@ -6937,6 +7008,9 @@ void __init sched_init_smp(void)
 #endif
 	sched_init_granularity();
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	ux_init_cpu_data();
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	init_sched_rt_class();
 	init_sched_dl_class();
 
@@ -7055,6 +7129,12 @@ void __init sched_init(void)
 		init_cfs_rq(&rq->cfs);
 		init_rt_rq(&rq->rt);
 		init_dl_rq(&rq->dl);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+		ux_init_rq_data(rq);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+#ifdef CONFIG_LOCKING_PROTECT
+		locking_init_rq_data(rq);
+#endif
 #ifdef CONFIG_FAIR_GROUP_SCHED
 		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
 		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);
@@ -7410,6 +7490,31 @@ static int sched_colocate_write(struct cgroup_subsys_state *css,
 	tg->wtg.colocate_update_disabled = true;
 	return 0;
 }
+
+#ifdef OPLUS_FEATURE_POWER_CPUFREQ
+#define WINDOW_POLICY_INVALID 4
+static u64
+window_policy_read(struct cgroup_subsys_state *css,
+		struct cftype *cft)
+{
+	struct task_group *tg = css_tg(css);
+	return tg->wtg.window_policy;
+}
+
+static int
+window_policy_write(struct cgroup_subsys_state *css, struct cftype *cft,
+		u64 window_policy)
+{
+	struct task_group *tg = css_tg(css);
+
+	if (window_policy >= WINDOW_POLICY_INVALID)
+		return -EINVAL;
+
+	tg->wtg.window_policy = window_policy;
+
+	return 0;
+}
+#endif
 #else
 static void walt_schedgp_attach(struct cgroup_taskset *tset) { }
 #endif /* CONFIG_SCHED_WALT */
@@ -8267,6 +8372,13 @@ static struct cftype cpu_legacy_files[] = {
 		.read_u64 = sched_colocate_read,
 		.write_u64 = sched_colocate_write,
 	},
+#ifdef OPLUS_FEATURE_POWER_CPUFREQ
+	{
+		.name = "uclamp.window_policy",
+		.read_u64 = window_policy_read,
+		.write_u64 = window_policy_write,
+	},
+#endif /* OPLUS_FEATURE_POWER_CPUFREQ */
 #endif /* CONFIG_SCHED_WALT */
 #endif /* CONFIG_UCLAMP_TASK_GROUP */
 	{ }	/* Terminate */
@@ -8468,6 +8580,13 @@ static struct cftype cpu_files[] = {
 		.read_u64 = sched_colocate_read,
 		.write_u64 = sched_colocate_write,
 	},
+#ifdef OPLUS_FEATURE_POWER_CPUFREQ
+	{
+		.name = "uclamp.window_policy",
+		.read_u64 = window_policy_read,
+		.write_u64 = window_policy_write,
+	},
+#endif /* OPLUS_FEATURE_POWER_CPUFREQ */
 #endif /* CONFIG_SCHED_WALT */
 #endif /* CONFIG_UCLAMP_TASK_GROUP */
 	{ }	/* terminate */

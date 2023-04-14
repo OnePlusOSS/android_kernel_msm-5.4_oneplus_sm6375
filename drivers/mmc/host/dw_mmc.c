@@ -1770,6 +1770,26 @@ ciu_out:
 
 	return ret;
 }
+#ifdef CONFIG_MMC_PASSWORDS
+static int dw_mci_sd_lock_reset(struct mmc_host *mmc)
+{
+	struct dw_mci_slot *slot = mmc_priv(mmc);
+	struct dw_mci *host = slot->host;
+	const struct dw_mci_drv_data *drv_data = slot->host->drv_data;
+	u32 present = 0;
+
+	pm_runtime_get_sync(mmc_dev(mmc));
+	present = dw_mci_get_cd(mmc);
+	if (present == 1) {
+		 if (drv_data && drv_data->work_fail_reset)
+			drv_data->work_fail_reset(host);
+	}
+	pm_runtime_mark_last_busy(mmc_dev(mmc));
+	pm_runtime_put_autosuspend(mmc_dev(mmc));
+
+	return 0;
+}
+#endif
 
 static const struct mmc_host_ops dw_mci_ops = {
 	.request		= dw_mci_request,
@@ -1786,6 +1806,9 @@ static const struct mmc_host_ops dw_mci_ops = {
 	.start_signal_voltage_switch = dw_mci_switch_voltage,
 	.init_card		= dw_mci_init_card,
 	.prepare_hs400_tuning	= dw_mci_prepare_hs400_tuning,
+//#ifdef CONFIG_MMC_PASSWORDS
+	.sd_lock_reset		= dw_mci_sd_lock_reset,
+//#endif
 };
 
 static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
@@ -2013,7 +2036,8 @@ static void dw_mci_tasklet_func(unsigned long priv)
 				 * delayed. Allowing the transfer to take place
 				 * avoids races and keeps things simple.
 				 */
-				if (err != -ETIMEDOUT) {
+				if (err != -ETIMEDOUT &&
+				    host->dir_status == DW_MCI_RECV_STATUS) {
 					state = STATE_SENDING_DATA;
 					continue;
 				}

@@ -851,6 +851,8 @@ config OOM_TASK_PRIORITY_ADJ_LIMIT
 	  tasks with an oom_score_adj value above a certain threshold
 	  before considering tasks with a lower oom_score_adj value.
 
+source "mm/damon/Kconfig"
+
 endmenu
 
 config PROCESS_RECLAIM
@@ -882,3 +884,61 @@ config MULTIPLE_KSWAPD
 	 (echo <num> > /proc/sys/vm/kswapd_threads)
 
 	 Values not in the range of 1..16 are ignored.
+
+config PHYSICAL_ANTI_FRAGMENTATION
+	bool "Physical memory anti-fragmentation"
+	default y
+	help
+	 Turn on the function of Physical memory anti-fragmentation.
+
+source "mm/zram_opt/Kconfig"
+config VIRTUAL_RESERVE_MEMORY
+	bool "reserved vma for gpu emergency mmap"
+	depends on QGKI
+	default n
+	help
+	 support reserved vma for gpu emergency mmap.
+
+config KVMALLOC_OPTIMIZATION
+	bool "use vmalloc for huge memory allocation"
+	depends on QGKI
+	default n
+	help
+	  use vmalloc for huge memory allocation
+
+config KSHRINK_LRUVECD
+	bool "enable async shrink_lruvecd"
+	default n
+	help
+	  enable async shrink_lruvecd
+
+config KSHRINK_SLABD
+	bool "enable async shrink_lruvecd"
+	default n
+	help
+	  enable async shrink_lruvecd
+
+
+config DYNAMIC_TUNNING_SWAPPINESS
+	bool "tunning swappiess depends on file_pages size"
+	default n
+	help
+		tunning swappiness depends on file_pages size
+
+source "mm/process_reclaim/Kconfig"
+source "mm/malloc_track/Kconfig"
+source "mm/task_mem/Kconfig"
+source "mm/mm_osvelte/Kconfig"
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "mm/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+config MAPPED_PROTECT
+	bool "mapped protect"
+	default n
+	help
+	  protect multi-mapped pages
+config LOOK_AROUND
+	bool "look around"
+	default n
+	help
+	  look aroud pages when rmap lru page

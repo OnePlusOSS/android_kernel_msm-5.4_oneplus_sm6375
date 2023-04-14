@@ -49,6 +49,10 @@
 #include <linux/dma-contiguous.h>
 #endif
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE)
+#include <soc/oplus/system/qcom_minidump_enhance.h>
+#endif
+
 #ifdef CONFIG_QCOM_DYN_MINIDUMP_STACK
 
 #include <trace/events/sched.h>
@@ -1263,16 +1267,22 @@ static void md_register_panic_data(void)
 				  &md_slabinfo_seq_buf);
 #ifdef CONFIG_PAGE_OWNER
 	if (is_page_owner_enabled()) {
+/*codebase_r1.0_00004.0 build error*/
+#ifdef CONFIG_PAGE_OWNER
 		md_register_memory_dump(md_pageowner_dump_size, "PAGEOWNER");
 		debugfs_create_file("page_owner_dump_size_mb", 0400, NULL, NULL,
 			    &proc_page_owner_dump_size_ops);
+#endif
 	}
 #endif
 #ifdef CONFIG_SLUB_DEBUG
 	if (is_slub_debug_enabled()) {
+/*codebase_r1.0_00004.0 build error*/
+#ifdef CONFIG_SLUB_DEBUG
 		md_register_memory_dump(md_slabowner_dump_size, "SLABOWNER");
 		debugfs_create_file("slab_owner_dump_size_mb", 0400, NULL, NULL,
 			    &proc_slab_owner_dump_size_ops);
+#endif
 	}
 #endif
 }
@@ -1365,6 +1375,9 @@ static int __init msm_minidump_log_init(void)
 	atomic_notifier_chain_register(&panic_notifier_list, &md_panic_blk);
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_CPU_CONTEXT
 	register_die_notifier(&md_die_context_nb);
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE)
+	register_cpu_contex();
 #endif
 #endif
 	return 0;

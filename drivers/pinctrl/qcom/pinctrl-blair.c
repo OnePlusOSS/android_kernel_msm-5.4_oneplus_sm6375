@@ -1392,7 +1392,7 @@ static const struct msm_pingroup blair_groups[] = {
 	[26] = PINGROUP(26, qup13_f1, qup13_f2, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[27] = PINGROUP(27, qup11_f1, qup11_f2, MDP_VSYNC, PLL_BIST, NA, qdss_gpio14,
 			NA, NA, NA, 0x9C010, 0),
-	[28] = PINGROUP(28, qup11_f2, qup11_f2, MDP_VSYNC, NA, qdss_gpio15, NA, NA,
+	[28] = PINGROUP(28, qup11_f1, qup11_f2, MDP_VSYNC, NA, qdss_gpio15, NA, NA,
 			NA, NA, 0x9C010, 1),
 	[29] = PINGROUP(29, cam_mclk, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[30] = PINGROUP(30, cam_mclk, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
@@ -1592,9 +1592,11 @@ static const struct msm_pingroup blair_groups[] = {
 	[163] = SDC_QDSD_PINGROUP(sdc2_data, 0x1a2000, 9, 0),
 };
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 static const int blair_reserved_gpios[] = {
 	13, 14, 15, 16, 17, 45, 46, 48, 56, 57, -1
 };
+#endif
 
 static const struct msm_gpio_wakeirq_map blair_mpm_map[] = {
 	{0, 84},
@@ -1673,7 +1675,9 @@ static const struct msm_pinctrl_soc_data blair_pinctrl = {
 	.nfunctions = ARRAY_SIZE(blair_functions),
 	.groups = blair_groups,
 	.ngroups = ARRAY_SIZE(blair_groups),
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	.reserved_gpios = blair_reserved_gpios,
+#endif
 	.ngpios = 157,
 	.wakeirq_map = blair_mpm_map,
 	.nwakeirq_map = ARRAY_SIZE(blair_mpm_map),

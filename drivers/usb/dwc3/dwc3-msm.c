@@ -2324,6 +2324,10 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 
 	dwc->err_evt_seen = false;
 	flush_delayed_work(&mdwc->sm_work);
+
+	/* see comments in dwc3_msm_suspend */
+	if (!mdwc->vbus_active)
+		pm_relax(mdwc->dev);
 }
 
 /*
@@ -3375,6 +3379,12 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 
 	dwc3_msm_update_bus_bw(mdwc, BUS_VOTE_NONE);
 
+	/*
+	 * If in_restart is marked as true from restart work do not release the wakeup
+	 * active source as it can lead the device to enter system suspend (if usb is
+	 * the last holding the wakeup active source). If actual cable disconnect happens
+	 * while in_restart is true wakeup active source will be released from restart work.
+	 */
 	if (!mdwc->in_restart) {
 		/*
 		 * release wakeup source with timeout to defer system suspend to
@@ -3742,10 +3752,8 @@ skip_update:
 		dwc->maximum_speed, dwc->max_hw_supp_speed,
 		mdwc->override_usb_speed);
 	if (mdwc->override_usb_speed &&
-			mdwc->override_usb_speed <= dwc->maximum_speed) {
+			mdwc->override_usb_speed <= dwc->maximum_speed)
 		dwc->maximum_speed = mdwc->override_usb_speed;
-		dwc->gadget.max_speed = dwc->maximum_speed;
-	}
 
 	dbg_event(0xFF, "speed", dwc->maximum_speed);
 
@@ -4025,6 +4033,7 @@ static int dwc3_msm_id_notifier(struct notifier_block *nb,
 		return NOTIFY_DONE;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
+	dev_err(mdwc->dev, "dwc3_msm_id_notifier_EXTCON_USB_HOST:enter\n");
 
 	dbg_event(0xFF, "extcon idx", enb->idx);
 
@@ -4079,6 +4088,7 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 		return NOTIFY_DONE;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
+	dev_err(mdwc->dev, "dwc3_msm_vbus_notifier_EXTOCN_USB:enter\n");
 
 	dbg_event(0xFF, "extcon idx", enb->idx);
 	dev_dbg(mdwc->dev, "vbus:%ld event received\n", event);
@@ -4575,7 +4585,11 @@ static void dwc3_start_stop_host(struct dwc3_msm *mdwc, bool start)
 	dwc3_ext_event_notify(mdwc);
 	dbg_event(0xFF, "flush_work", 0);
 	flush_work(&mdwc->resume_work);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	flush_workqueue(mdwc->sm_usb_wq);
+#else
 	drain_workqueue(mdwc->sm_usb_wq);
+#endif
 	if (start)
 		dbg_log_string("host mode started");
 	else
@@ -4599,7 +4613,11 @@ static void dwc3_start_stop_device(struct dwc3_msm *mdwc, bool start)
 	dwc3_ext_event_notify(mdwc);
 	dbg_event(0xFF, "flush_work", 0);
 	flush_work(&mdwc->resume_work);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	flush_workqueue(mdwc->sm_usb_wq);
+#else
 	drain_workqueue(mdwc->sm_usb_wq);
+#endif
 	if (start)
 		dbg_log_string("device mode restarted");
 	else
@@ -4635,7 +4653,11 @@ int dwc3_msm_release_ss_lane(struct device *dev, bool usb_dp_concurrent_mode)
 	dbg_event(0xFF, "ss_lane_release", 0);
 	/* flush any pending work */
 	flush_work(&mdwc->resume_work);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	flush_workqueue(mdwc->sm_usb_wq);
+#else
 	drain_workqueue(mdwc->sm_usb_wq);
+#endif
 
 	redriver_release_usb_lanes(mdwc->ss_redriver_node);
 
@@ -5684,6 +5706,13 @@ static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned int mA)
 
 	if (mdwc->apsd_source == IIO && chg_type != POWER_SUPPLY_TYPE_USB)
 		return 0;
+
+#ifdef CONFIG_OPLUS_FEATURE_CHG_MISC
+	dev_info(mdwc->dev, "Avail curr from USB = %u, pre max_power = %u\n", mA, mdwc->max_power);
+	if (mA == 0 || mA == 2) {
+		return 0;
+	}
+#endif
 
 	/* Set max current limit in uA */
 	pval.intval = 1000 * mA;

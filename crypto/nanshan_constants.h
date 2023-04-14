@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+* Copyright (C) 2018-2022 Oplus. All rights reserved.
+*/
+
+#pragma once
+
+/* Tunables */
+#ifndef NAN_SHAN_COMPRESS_HASH_BITS
+#define NAN_SHAN_COMPRESS_HASH_BITS 10
+#endif
+
+#ifndef NAN_SHAN_COMPRESS_HASH_ENTRIES
+#define NAN_SHAN_COMPRESS_HASH_ENTRIES (1 << NAN_SHAN_COMPRESS_HASH_BITS)
+#endif
+
+#ifndef NAN_SHAN_COMPRESS_HASH_MULTIPLY
+#define NAN_SHAN_COMPRESS_HASH_MULTIPLY 2654435761U
+#endif
+
+#ifndef NAN_SHAN_COMPRESS_HASH_SHIFT
+#define NAN_SHAN_COMPRESS_HASH_SHIFT (32 - NAN_SHAN_COMPRESS_HASH_BITS)
+#endif
+
+/* Not tunables */
+#ifndef NAN_SHAN_GOFAST_SAFETY_MARGIN
+#define NAN_SHAN_GOFAST_SAFETY_MARGIN 64
+#endif
+
+#ifndef NAN_SHAN_DISTANCE_BOUND
+#define NAN_SHAN_DISTANCE_BOUND 65536
+#endif

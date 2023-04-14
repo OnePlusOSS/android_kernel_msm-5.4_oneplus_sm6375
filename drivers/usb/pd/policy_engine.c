@@ -170,6 +170,24 @@ static const char * const usbpd_ext_msg_strings[] = {
 	"Country_Codes",
 };
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define	POWER_SUPPLY_PROP_PD_ACTIVE			POWER_SUPPLY_IIO_PROP_PD_ACTIVE
+#define	POWER_SUPPLY_PROP_TYPEC_CC_ORIENTATION		POWER_SUPPLY_IIO_PROP_TYPEC_CC_ORIENTATION
+#define	POWER_SUPPLY_PROP_CONNECTOR_TYPE		POWER_SUPPLY_IIO_PROP_CONNECTOR_TYPE
+#define	POWER_SUPPLY_PROP_TYPEC_POWER_ROLE		POWER_SUPPLY_IIO_PROP_TYPEC_POWER_ROLE
+#define	POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED	POWER_SUPPLY_IIO_PROP_PD_USB_SUSPEND_SUPPORTED
+#define	POWER_SUPPLY_PROP_TYPEC_SRC_RP			POWER_SUPPLY_IIO_PROP_TYPEC_SRC_RP
+#define	POWER_SUPPLY_PROP_PD_IN_HARD_RESET		POWER_SUPPLY_IIO_PROP_PD_IN_HARD_RESET
+#define	POWER_SUPPLY_PROP_PD_CURRENT_MAX		POWER_SUPPLY_IIO_PROP_PD_CURRENT_MAX
+#define	POWER_SUPPLY_PROP_PR_SWAP			POWER_SUPPLY_IIO_PROP_PR_SWAP
+#define	POWER_SUPPLY_PROP_PD_VOLTAGE_MIN		POWER_SUPPLY_IIO_PROP_PD_VOLTAGE_MIN
+#define	POWER_SUPPLY_PROP_PD_VOLTAGE_MAX		POWER_SUPPLY_IIO_PROP_PD_VOLTAGE_MAX
+#define	POWER_SUPPLY_PROP_REAL_TYPE			POWER_SUPPLY_IIO_PROP_REAL_TYPE
+#define	POWER_SUPPLY_PROP_TYPEC_MODE			POWER_SUPPLY_IIO_PROP_TYPEC_MODE
+#define	POWER_SUPPLY_PROP_PE_START			POWER_SUPPLY_IIO_PROP_PE_START
+#define POWER_SUPPLY_PROP_PD_SDP			POWER_SUPPLY_IIO_PROP_PD_SDP
+#endif
+
 enum iio_psy_property {
 	POWER_SUPPLY_PROP_PD_ACTIVE = 0,
 	POWER_SUPPLY_PROP_TYPEC_CC_ORIENTATION,
@@ -185,6 +203,9 @@ enum iio_psy_property {
 	POWER_SUPPLY_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_TYPEC_MODE,
 	POWER_SUPPLY_PROP_PE_START,
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	POWER_SUPPLY_PROP_PD_SDP,
+#endif
 	POWER_SUPPLY_IIO_PROP_MAX,
 };
 
@@ -192,7 +213,11 @@ static const char * const usbpd_iio_channel_map[] = {
 	"pd_active", "typec_cc_orientation", "connector_type",
 	"typec_power_role", "pd_usb_suspend_supported", "typec_src_rp",
 	"pd_in_hard_reset", "pr_current_max", "pr_swap", "pd_voltage_min",
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	"pd_voltage_max", "real_type", "typec_mode", "pe_start",
+#else
+	"pd_voltage_max", "real_type", "typec_mode", "pe_start", "pd_sdp",
+#endif
 };
 
 static inline const char *msg_to_string(u8 id, bool is_data, bool is_ext)
@@ -275,7 +300,7 @@ static void *usbpd_ipc_log;
 #define PD_MAX_DATA_OBJ		7
 
 #define PD_SRC_CAP_EXT_DB_LEN	24
-#define PD_STATUS_DB_LEN	5
+#define PD_STATUS_DB_LEN	6
 #define PD_BATTERY_CAP_DB_LEN	9
 
 #define PD_MAX_EXT_MSG_LEN		260
@@ -932,9 +957,19 @@ static int pd_eval_src_caps(struct usbpd *pd)
 	usbpd_set_psy_iio_property(pd,
 			POWER_SUPPLY_PROP_PD_ACTIVE, &val);
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	/* First time connecting to a PD source and it supports USB data */
 	if (pd->peer_usb_comm && pd->current_dr == DR_UFP && !pd->pd_connected)
 		start_usb_peripheral(pd);
+#else
+	if (pd->peer_usb_comm && pd->current_dr == DR_UFP && !pd->pd_connected) {
+		val.intval = true;
+		usbpd_set_psy_iio_property(pd,
+				POWER_SUPPLY_PROP_PD_SDP, &val);
+		printk("set pd_sdp = true\n");
+		start_usb_peripheral(pd);
+	}
+#endif
 
 	/* Select the first PDO (vSafe5V) immediately. */
 	pd_select_pdo(pd, 1, 0, 0);
@@ -1412,10 +1447,12 @@ int usbpd_send_svdm(struct usbpd *pd, u16 svid, u8 cmd,
 		enum usbpd_svdm_cmd_type cmd_type, int obj_pos,
 		const u32 *vdos, int num_vdos)
 {
-	u32 svdm_hdr = SVDM_HDR(svid, 0, obj_pos, cmd_type, cmd);
+	u32 svdm_hdr = SVDM_HDR(svid, pd->spec_rev == USBPD_REV_30 ? 1 : 0,
+			obj_pos, cmd_type, cmd);
 
-	usbpd_dbg(&pd->dev, "VDM tx: svid:%x cmd:%x cmd_type:%x svdm_hdr:%x\n",
-			svid, cmd, cmd_type, svdm_hdr);
+	usbpd_dbg(&pd->dev, "VDM tx: svid:%04x ver:%d obj_pos:%d cmd:%x cmd_type:%x svdm_hdr:%x\n",
+			svid, pd->spec_rev == USBPD_REV_30 ? 1 : 0, obj_pos,
+			cmd, cmd_type, svdm_hdr);
 
 	return usbpd_send_vdm(pd, svdm_hdr, vdos, num_vdos);
 }
@@ -1582,7 +1619,7 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 	ktime_t recvd_time = ktime_get();
 
 	usbpd_dbg(&pd->dev,
-			"VDM rx: svid:%x cmd:%x cmd_type:%x vdm_hdr:%x has_dp: %s\n",
+			"VDM rx: svid:%04x cmd:%x cmd_type:%x vdm_hdr:%x has_dp: %s\n",
 			svid, cmd, cmd_type, vdm_hdr,
 			pd->has_dp ? "true" : "false");
 
@@ -1605,11 +1642,9 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 		return;
 	}
 
-	if (SVDM_HDR_VER(vdm_hdr) > 1) {
-		usbpd_dbg(&pd->dev, "Discarding SVDM with incorrect version:%d\n",
+	if (SVDM_HDR_VER(vdm_hdr) > 1)
+		usbpd_dbg(&pd->dev, "Received SVDM with unsupported version:%d\n",
 				SVDM_HDR_VER(vdm_hdr));
-		return;
-	}
 
 	if (cmd_type != SVDM_CMD_TYPE_INITIATOR &&
 			pd->current_state != PE_SRC_STARTUP_WAIT_FOR_VDM_RESP)
@@ -1634,11 +1669,6 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 						0, SOP_MSG);
 				if (ret)
 					usbpd_set_state(pd, PE_SEND_SOFT_RESET);
-			} else {
-				usbpd_send_svdm(pd, svid, cmd,
-						SVDM_CMD_TYPE_RESP_NAK,
-						SVDM_HDR_OBJ_POS(vdm_hdr),
-						NULL, 0);
 			}
 		}
 		break;
@@ -1721,8 +1751,12 @@ static void handle_vdm_tx(struct usbpd *pd, enum pd_sop_type sop_type)
 
 		mutex_unlock(&pd->svid_handler_lock);
 		/* retry when hitting PE_SRC/SNK_Ready again */
-		if (ret != -EBUSY && sop_type == SOP_MSG)
+		if (ret != -EBUSY && sop_type == SOP_MSG) {
 			usbpd_set_state(pd, PE_SEND_SOFT_RESET);
+		} else if (sop_type != SOP_MSG) {
+			kfree(pd->vdm_tx);
+			pd->vdm_tx = NULL;
+		}
 
 		return;
 	}
@@ -3012,13 +3046,15 @@ static bool handle_ext_snk_ready(struct usbpd *pd, struct rx_msg *rx_msg)
 		complete(&pd->is_ready);
 		break;
 	case MSG_STATUS:
-		if (rx_msg->data_len != PD_STATUS_DB_LEN) {
-			usbpd_err(&pd->dev, "Invalid status db\n");
-			break;
-		}
+		if (rx_msg->data_len > PD_STATUS_DB_LEN)
+			usbpd_err(&pd->dev, "Invalid status db length:%d\n",
+					rx_msg->data_len);
+
+		memset(&pd->status_db, 0, sizeof(pd->status_db));
 		memcpy(&pd->status_db, rx_msg->payload,
-			sizeof(pd->status_db));
+			min((size_t)rx_msg->data_len, sizeof(pd->status_db)));
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
+		complete(&pd->is_ready);
 		break;
 	case MSG_BATTERY_CAPABILITIES:
 		if (rx_msg->data_len != PD_BATTERY_CAP_DB_LEN) {
@@ -3509,6 +3545,7 @@ static void handle_disconnect(struct usbpd *pd)
 	pd->forced_pr = QTI_POWER_SUPPLY_TYPEC_PR_NONE;
 
 	pd->current_state = PE_UNKNOWN;
+	pd_reset_protocol(pd);
 
 	kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
 	typec_unregister_partner(pd->partner);
@@ -3621,8 +3658,10 @@ sm_done:
 	spin_unlock_irqrestore(&pd->rx_lock, flags);
 
 	/* requeue if there are any new/pending RX messages */
-	if (!ret && !pd->sm_queued)
+	if (!ret) {
+		usbpd_dbg(&pd->dev, "Requeuing new/pending RX messages\n");
 		kick_sm(pd, 0);
+	}
 
 	if (!pd->sm_queued)
 		pm_relax(&pd->dev);
@@ -4009,9 +4048,9 @@ static int usbpd_uevent(struct device *dev, struct kobj_uevent_env *env)
 				"explicit" : "implicit");
 	add_uevent_var(env, "ALT_MODE=%d", pd->vdm_state == MODE_ENTERED);
 
-	add_uevent_var(env, "SDB=%02x %02x %02x %02x %02x", pd->status_db[0],
-			pd->status_db[1], pd->status_db[2], pd->status_db[3],
-			pd->status_db[4]);
+	add_uevent_var(env, "SDB=%02x %02x %02x %02x %02x %02x",
+			pd->status_db[0], pd->status_db[1], pd->status_db[2],
+			pd->status_db[3], pd->status_db[4], pd->status_db[5]);
 
 	return 0;
 }
@@ -4616,6 +4655,81 @@ struct usbpd *devm_usbpd_get_by_phandle(struct device *dev, const char *phandle)
 }
 EXPORT_SYMBOL(devm_usbpd_get_by_phandle);
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+struct usbpd *pd_lobal;
+int oplus_pdo_select(int vbus_mv, int ibus_ma)
+{
+	int i = 0;
+	int rc = 0;
+	u32 pdo = 0;
+	struct usbpd *pd = pd_lobal;
+
+	for (i = 0; i < ARRAY_SIZE(pd->received_pdos); i++) {
+		pdo = pd->received_pdos[i];
+		if (vbus_mv == PD_SRC_PDO_FIXED_VOLTAGE(pdo) * 50 || pdo == 0)
+			break;
+	}
+
+	mutex_lock(&pd->swap_lock);
+
+	/* Only allowed if we are already in explicit sink contract */
+	if (pd->current_state != PE_SNK_READY || !is_sink_tx_ok(pd)) {
+		printk(KERN_ERR "%s: cannot select new pdo yet\n", __func__);
+		rc = -EBUSY;
+		goto out;
+	}
+
+	if (i > 7) {
+		printk(KERN_ERR "%s: inval pdo[0x%x]\n", __func__, pdo);
+		rc = -EINVAL;
+		goto out;
+	}
+
+	if (vbus_mv != PD_SRC_PDO_FIXED_VOLTAGE(pdo) * 50) {
+		if (i > 0) {
+			printk(KERN_ERR "%s: can not find vbus_mv[%d], the last pdos[%d]=[%d]\n", __func__,
+				vbus_mv, i -1, PD_SRC_PDO_FIXED_VOLTAGE(pd->received_pdos[i - 1]) * 50);
+		} else {
+			printk(KERN_ERR "%s: can not find vbus_mv[%d], pdos0=[%d]\n", __func__,
+				vbus_mv, PD_SRC_PDO_FIXED_VOLTAGE(pd->received_pdos[i]) * 50);
+		}
+		rc = -EINVAL;
+		goto out;
+	}
+
+	rc = pd_select_pdo(pd, i + 1, vbus_mv * 1000, ibus_ma * 1000);
+	if (rc) {
+		printk(KERN_ERR "%s: pd_select_pdo fail, rc=%d\n", __func__, rc);
+		goto out;
+	}
+
+	reinit_completion(&pd->is_ready);
+	pd->send_request = true;
+	kick_sm(pd, 0);
+
+	/* wait for operation to complete */
+	if (!wait_for_completion_timeout(&pd->is_ready, msecs_to_jiffies(1000))) {
+		printk(KERN_ERR "%s: pdo[%d], vbus_mv[%d], ibus_ma[%d] request timed out\n",
+				__func__, i, vbus_mv, ibus_ma);
+		rc = -ETIMEDOUT;
+		goto out;
+	}
+
+	/* determine if request was accepted/rejected */
+	if (pd->selected_pdo != pd->requested_pdo ||
+			pd->current_voltage != pd->requested_voltage) {
+		printk(KERN_ERR "%s: request rejected\n", __func__);
+		rc = -EINVAL;
+	}
+
+out:
+	pd->send_request = false;
+	mutex_unlock(&pd->swap_lock);
+	return rc;
+}
+EXPORT_SYMBOL(oplus_pdo_select);
+#endif
+
 static void usbpd_release(struct device *dev)
 {
 	struct usbpd *pd = container_of(dev, struct usbpd, dev);
@@ -4823,6 +4937,10 @@ struct usbpd *usbpd_create(struct device *parent,
 
 	/* force read initial power_supply values */
 	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	pd_lobal = pd;
+#endif
 
 	return pd;
 

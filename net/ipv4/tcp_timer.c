@@ -23,6 +23,11 @@
 #include <linux/gfp.h>
 #include <net/tcp.h>
 
+#ifdef OPLUS_FEATURE_IPV6_OPTIMIZE
+extern int ipv6_rto_encounter(kuid_t uid, struct in6_addr v6_saddr);
+extern int ipv4_rto_encounter(kuid_t uid, unsigned int v4_saddr);
+#endif /* OPLUS_FEATURE_IPV6_OPTIMIZE */
+
 static u32 tcp_clamp_rto_to_user_timeout(const struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -175,7 +180,7 @@ static int tcp_out_of_resources(struct sock *sk, bool do_reset)
  */
 static int tcp_orphan_retries(struct sock *sk, bool alive)
 {
-	int retries = sock_net(sk)->ipv4.sysctl_tcp_orphan_retries; /* May be zero. */
+	int retries = READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_orphan_retries); /* May be zero. */
 
 	/* We know from an ICMP that something is wrong. */
 	if (sk->sk_err_soft && !alive)
@@ -191,8 +196,14 @@ static int tcp_orphan_retries(struct sock *sk, bool alive)
 
 static void tcp_mtu_probing(struct inet_connection_sock *icsk, struct sock *sk)
 {
-	const struct net *net = sock_net(sk);
+	//#ifdef OPLUS_FEATURE_WIFI_MTUDETECT
+	//Modify for [804055] enabling mtu probing when an ICMP black hole detected,
+	//const struct net *net = sock_net(sk);
+	//int mss;
+	struct net *net = sock_net(sk);
 	int mss;
+	net->ipv4.sysctl_tcp_mtu_probing = 1;
+	//#endif /* OPLUS_FEATURE_WIFI_MTUDETECT */
 
 	/* Black hole detection */
 	if (!net->ipv4.sysctl_tcp_mtu_probing)
@@ -203,9 +214,9 @@ static void tcp_mtu_probing(struct inet_connection_sock *icsk, struct sock *sk)
 		icsk->icsk_mtup.probe_timestamp = tcp_jiffies32;
 	} else {
 		mss = tcp_mtu_to_mss(sk, icsk->icsk_mtup.search_low) >> 1;
-		mss = min(net->ipv4.sysctl_tcp_base_mss, mss);
-		mss = max(mss, net->ipv4.sysctl_tcp_mtu_probe_floor);
-		mss = max(mss, net->ipv4.sysctl_tcp_min_snd_mss);
+		mss = min(READ_ONCE(net->ipv4.sysctl_tcp_base_mss), mss);
+		mss = max(mss, READ_ONCE(net->ipv4.sysctl_tcp_mtu_probe_floor));
+		mss = max(mss, READ_ONCE(net->ipv4.sysctl_tcp_min_snd_mss));
 		icsk->icsk_mtup.search_low = tcp_mss_to_mtu(sk, mss);
 	}
 	tcp_sync_mss(sk, icsk->icsk_pmtu_cookie);
@@ -277,7 +288,7 @@ static int tcp_write_timeout(struct sock *sk)
 		retry_until = icsk->icsk_syn_retries ? : net->ipv4.sysctl_tcp_syn_retries;
 		expired = icsk->icsk_retransmits >= retry_until;
 	} else {
-		if (retransmits_timed_out(sk, net->ipv4.sysctl_tcp_retries1, 0)) {
+		if (retransmits_timed_out(sk, READ_ONCE(net->ipv4.sysctl_tcp_retries1), 0)) {
 			/* Black hole detection */
 			tcp_mtu_probing(icsk, sk);
 
@@ -286,7 +297,7 @@ static int tcp_write_timeout(struct sock *sk)
 			sk_rethink_txhash(sk);
 		}
 
-		retry_until = net->ipv4.sysctl_tcp_retries2;
+		retry_until = READ_ONCE(net->ipv4.sysctl_tcp_retries2);
 		if (sock_flag(sk, SOCK_DEAD)) {
 			const bool alive = icsk->icsk_rto < TCP_RTO_MAX;
 
@@ -309,6 +320,18 @@ static int tcp_write_timeout(struct sock *sk)
 				  icsk->icsk_rto, (int)expired);
 
 	if (expired) {
+		#ifdef OPLUS_FEATURE_IPV6_OPTIMIZE
+			if (((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_ESTABLISHED))
+				&& !((1 << sk->sk_state) & (TCPF_SYN_RECV | TCPF_FIN_WAIT1 | TCPF_FIN_WAIT2 | TCPF_TIME_WAIT))) {
+				if(sk->sk_family == AF_INET6) {
+#if IS_ENABLED(CONFIG_IPV6)
+					ipv6_rto_encounter(sk->sk_uid, sk->__sk_common.skc_v6_rcv_saddr);
+#endif /* IS_ENABLED(CONFIG_IPV6) */
+				} else if (sk->sk_family == AF_INET) {
+					ipv4_rto_encounter(sk->sk_uid, sk->__sk_common.skc_rcv_saddr);
+				}
+			}
+		#endif /* OPLUS_FEATURE_IPV6_OPTIMIZE */
 		/* Has it gone just too far? */
 		tcp_write_err(sk);
 		return 1;
@@ -413,7 +436,7 @@ static void tcp_probe_timer(struct sock *sk)
 		 msecs_to_jiffies(icsk->icsk_user_timeout))
 		goto abort;
 
-	max_probes = sock_net(sk)->ipv4.sysctl_tcp_retries2;
+	max_probes = READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_retries2);
 	if (sock_flag(sk, SOCK_DEAD)) {
 		const bool alive = inet_csk_rto_backoff(icsk, TCP_RTO_MAX) < TCP_RTO_MAX;
 
@@ -601,7 +624,7 @@ out_reset_timer:
 	 * linear-timeout retransmissions into a black hole
 	 */
 	if (sk->sk_state == TCP_ESTABLISHED &&
-	    (tp->thin_lto || net->ipv4.sysctl_tcp_thin_linear_timeouts) &&
+	    (tp->thin_lto || READ_ONCE(net->ipv4.sysctl_tcp_thin_linear_timeouts)) &&
 	    tcp_stream_is_thin(tp) &&
 	    icsk->icsk_retransmits <= TCP_THIN_LINEAR_RETRIES) {
 		icsk->icsk_backoff = 0;
@@ -612,7 +635,7 @@ out_reset_timer:
 	}
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
 				  tcp_clamp_rto_to_user_timeout(sk), TCP_RTO_MAX);
-	if (retransmits_timed_out(sk, net->ipv4.sysctl_tcp_retries1 + 1, 0))
+	if (retransmits_timed_out(sk, READ_ONCE(net->ipv4.sysctl_tcp_retries1) + 1, 0))
 		__sk_dst_reset(sk);
 
 out:;

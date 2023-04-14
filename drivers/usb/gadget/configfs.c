@@ -15,6 +15,12 @@
 #include <linux/kdev_t.h>
 #include <linux/usb/ch9.h>
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#ifdef CONFIG_USB_F_NCM
+#include "function/u_ncm.h"
+#endif
+#endif
+
 #ifdef CONFIG_USB_CONFIGFS_F_ACC
 extern int acc_ctrlrequest(struct usb_composite_dev *cdev,
 				const struct usb_ctrlrequest *ctrl);
@@ -1577,6 +1583,8 @@ static void configfs_composite_unbind(struct usb_gadget *gadget)
 	usb_ep_autoconfig_reset(cdev->gadget);
 	spin_lock_irqsave(&gi->spinlock, flags);
 	cdev->gadget = NULL;
+	cdev->deactivations = 0;
+	gadget->deactivated = false;
 	set_gadget_data(gadget, NULL);
 	spin_unlock_irqrestore(&gi->spinlock, flags);
 }
@@ -1604,6 +1612,22 @@ static int android_setup(struct usb_gadget *gadget,
 				break;
 		}
 	}
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#ifdef CONFIG_USB_F_NCM
+	printk("android_setup: ctrlrequest->bRequestType=%d, bRequest=%d, value=%d\n", c->bRequestType, c->bRequest, value);
+	if (value < 0)
+		value = ncm_ctrlrequest(cdev, c);
+
+	/*
+	* for mirror link command case, if it already been handled,
+	* do not pass to composite_setup
+	*/
+	if (value == 0) {
+		return value;
+	}
+#endif
+#endif
 
 #ifdef CONFIG_USB_CONFIGFS_F_ACC
 	if (value < 0)

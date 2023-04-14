@@ -23,6 +23,15 @@
 #define MMC_CARD_SDXC		(1<<3)		/* card is SDXC */
 #define MMC_CARD_REMOVED	(1<<4)		/* card has been removed */
 #define MMC_STATE_SUSPENDED	(1<<5)		/* card is suspended */
+#ifdef CONFIG_MMC_PASSWORDS
+#define MMC_STATE_LOCKED    (1<<12)     /* card is currently locked */
+#define MMC_STATE_ENCRYPT   (1<<13)     /* card is currently encrypt */
+#endif
+
+#ifdef CONFIG_MMC_PASSWORDS
+#define MMC_STATE_LOCKED    (1<<12)     /* card is currently locked */
+#define MMC_STATE_ENCRYPT   (1<<13)     /* card is currently encrypt */
+#endif
 
 #define mmc_card_present(c)	((c)->state & MMC_STATE_PRESENT)
 #define mmc_card_readonly(c)	((c)->state & MMC_STATE_READONLY)
@@ -38,6 +47,15 @@
 #define mmc_card_set_removed(c) ((c)->state |= MMC_CARD_REMOVED)
 #define mmc_card_set_suspended(c) ((c)->state |= MMC_STATE_SUSPENDED)
 #define mmc_card_clr_suspended(c) ((c)->state &= ~MMC_STATE_SUSPENDED)
+
+#ifdef CONFIG_MMC_PASSWORDS
+#define mmc_card_locked(c)		((c)->state & MMC_STATE_LOCKED)
+#define mmc_card_encrypt(c)		((c)->state & MMC_STATE_ENCRYPT)
+#define mmc_card_set_locked(c)		((c)->state |= MMC_STATE_LOCKED)
+#define mmc_card_set_encrypted(c)	((c)->state |= MMC_STATE_ENCRYPT)
+#define mmc_card_clr_locked(c)		((c)->state &= ~MMC_STATE_LOCKED)
+#define mmc_card_clr_encrypted(c)	((c)->state &= ~MMC_STATE_ENCRYPT)
+#endif
 
 /*
  * The world is not perfect and supplies us with broken mmc/sdio devices.
