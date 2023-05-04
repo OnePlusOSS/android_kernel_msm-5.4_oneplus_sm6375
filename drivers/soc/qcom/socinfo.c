@@ -621,6 +621,9 @@ struct soc_id {
 	const char *name;
 };
 
+static char *fake_soc_id_name = "SM4350";
+static char *real_soc_id_name = "SM6375";
+
 static const struct soc_id soc_id[] = {
 	{ 87, "MSM8960" },
 	{ 109, "APQ8064" },
@@ -1199,15 +1202,22 @@ static void socinfo_print(void)
 	}
 }
 
+extern bool is_confidential(void);
+
 static const char *socinfo_machine(unsigned int id)
 {
 	int idx;
 
 	for (idx = 0; idx < ARRAY_SIZE(soc_id); idx++) {
-		if (soc_id[idx].id == id)
-			return soc_id[idx].name;
-	}
 
+        if (soc_id[idx].id == id) {
+            if (is_confidential()) {
+                return fake_soc_id_name;
+            } else {
+                return real_soc_id_name;
+            }
+	}
+        }
 	return NULL;
 }
 

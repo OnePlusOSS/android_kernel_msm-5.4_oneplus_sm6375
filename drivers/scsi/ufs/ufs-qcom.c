@@ -25,7 +25,7 @@
 #include "ufshci.h"
 #include "ufs_quirks.h"
 #include "ufshcd-crypto-qti.h"
-
+#include <linux/proc_fs.h>
 #define UFS_QCOM_DEFAULT_DBG_PRINT_EN	\
 	(UFS_QCOM_DBG_PRINT_REGS_EN | UFS_QCOM_DBG_PRINT_TEST_BUS_EN)
 
@@ -40,7 +40,9 @@
 
 #define	ANDROID_BOOT_DEV_MAX	30
 static char android_boot_dev[ANDROID_BOOT_DEV_MAX];
-
+struct proc_dir_entry *signalCtrl_ctrl_dir;
+int create_signal_quality_proc(struct ufs_hba *hba);
+void remove_signal_quality_proc(struct ufs_hba *hba);
 enum {
 	TSTBUS_UAWM,
 	TSTBUS_UARM,
@@ -2263,6 +2265,9 @@ ufs_qcom_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 		case QUERY_DESC_IDN_INTERCONNECT:
 		case QUERY_DESC_IDN_GEOMETRY:
 		case QUERY_DESC_IDN_POWER:
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+		case QUERY_DESC_IDN_HEALTH:
+#endif
 			index = 0;
 			break;
 		case QUERY_DESC_IDN_UNIT:
@@ -2307,6 +2312,9 @@ ufs_qcom_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 		case QUERY_ATTR_IDN_EE_CONTROL:
 		case QUERY_ATTR_IDN_EE_STATUS:
 		case QUERY_ATTR_IDN_SECONDS_PASSED:
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+		case QUERY_ATTR_IDN_FFU_STATUS:
+#endif
 			index = 0;
 			break;
 		case QUERY_ATTR_IDN_DYN_CAP_NEEDED:
@@ -2874,7 +2882,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	}
 
 	ufs_qcom_init_sysfs(hba);
-
+	create_signal_quality_proc(hba);
 	/* Provide SCSI host ioctl API */
 	hba->host->hostt->ioctl = (int (*)(struct scsi_device *, unsigned int,
 				   void __user *))ufs_qcom_ioctl;
@@ -2909,6 +2917,7 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 
 	ufs_qcom_disable_lane_clks(host);
 	ufs_qcom_phy_power_off(hba);
+	remove_signal_quality_proc(hba);
 	phy_exit(host->generic_phy);
 }
 
@@ -3753,6 +3762,57 @@ static int ufs_qcom_remove(struct platform_device *pdev)
 		remove_group_qos(qcg);
 	ufshcd_remove(hba);
 	return 0;
+}
+
+static int record_read_func(struct seq_file *s, void *v)
+{
+	struct ufs_hba *hba =
+	    (struct ufs_hba *)(s->private);
+	if (!hba) {
+		return -EINVAL;
+	}
+
+    seq_printf(s, "unipro_PA_err_total_cnt %d\n", ufs_qcom_gec(hba, &hba->ufs_stats.pa_err,"pa_err_cnt_total"));
+    seq_printf(s, "unipro_DL_err_total_cnt %d\n",ufs_qcom_gec(hba, &hba->ufs_stats.dl_err,"dl_err_cnt_total"));
+    seq_printf(s, "unipro_DME_err_total_cnt %d\n",ufs_qcom_gec(hba, &hba->ufs_stats.dme_err,"dme_err_cnt"));
+	return 0;
+}
+
+static int record_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, record_read_func, PDE_DATA(inode));
+}
+
+static const struct file_operations record_fops = {
+	.owner = THIS_MODULE,
+	.open = record_open,
+	.read = seq_read,
+	.release = single_release,
+};
+
+
+int create_signal_quality_proc(struct ufs_hba *hba)
+{
+	struct proc_dir_entry *d_entry;
+	signalCtrl_ctrl_dir = proc_mkdir("ufs_signalShow", NULL);
+	if (!signalCtrl_ctrl_dir) {
+		return -ENOMEM;
+	}
+	d_entry = proc_create_data("record", S_IRUGO, signalCtrl_ctrl_dir,
+	        &record_fops, hba);
+	if (!d_entry) {
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+void remove_signal_quality_proc(struct ufs_hba *hba)
+{
+	if (signalCtrl_ctrl_dir) {
+		remove_proc_entry("record", signalCtrl_ctrl_dir);
+	}
+	return;
 }
 
 static const struct of_device_id ufs_qcom_of_match[] = {

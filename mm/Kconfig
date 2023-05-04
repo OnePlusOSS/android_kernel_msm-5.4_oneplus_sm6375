@@ -675,10 +675,19 @@ config DEFERRED_STRUCT_PAGE_INIT
 	  lifetime of the system until these kthreads finish the
 	  initialisation.
 
+config PAGE_IDLE_FLAG
+	bool "Add PG_idle and PG_young flags"
+	default y
+	help
+	  This feature adds PG_idle and PG_young flags in 'struct page'.  PTE
+	  Accessed bit writers can set the state of the bit in the flags to let
+	  other PTE Accessed bit readers don't disturbed.
+
 config IDLE_PAGE_TRACKING
 	bool "Enable idle page tracking"
 	depends on SYSFS && MMU
 	select PAGE_EXTENSION if !64BIT
+	select PAGE_IDLE_FLAG
 	help
 	  This feature allows to estimate the amount of user pages that have
 	  not been touched during a given period of time. This information can
@@ -851,6 +860,8 @@ config OOM_TASK_PRIORITY_ADJ_LIMIT
 	  tasks with an oom_score_adj value above a certain threshold
 	  before considering tasks with a lower oom_score_adj value.
 
+source "mm/damon/Kconfig"
+
 endmenu
 
 config PROCESS_RECLAIM
@@ -869,7 +880,7 @@ config PROCESS_RECLAIM
 	 (addr, addr + size-bytes) of the process.
 
 	 Any other value is ignored.
-
+ 
 config MULTIPLE_KSWAPD
 	bool "Spawn multiple kswapd threads"
 	depends on QGKI
@@ -882,3 +893,37 @@ config MULTIPLE_KSWAPD
 	 (echo <num> > /proc/sys/vm/kswapd_threads)
 
 	 Values not in the range of 1..16 are ignored.
+
+config PHYSICAL_ANTI_FRAGMENTATION
+	bool "Physical memory anti-fragmentation"
+	default y
+	help
+	 Turn on the function of Physical memory anti-fragmentation.
+
+source "mm/zram_opt/Kconfig"
+config VIRTUAL_RESERVE_MEMORY
+	bool "reserved vma for gpu emergency mmap"
+	depends on QGKI
+	default n
+	help
+	 support reserved vma for gpu emergency mmap.
+
+config KVMALLOC_OPTIMIZATION
+	bool "use vmalloc for huge memory allocation"
+	depends on QGKI
+	default n
+	help
+	  use vmalloc for huge memory allocation
+
+config DYNAMIC_TUNNING_SWAPPINESS
+	bool "tunning swappiess depends on file_pages size"
+	default n
+	help
+		tunning swappiness depends on file_pages size
+
+source "mm/process_reclaim/Kconfig"
+source "mm/malloc_track/Kconfig"
+source "mm/task_mem/Kconfig"
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "mm/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */

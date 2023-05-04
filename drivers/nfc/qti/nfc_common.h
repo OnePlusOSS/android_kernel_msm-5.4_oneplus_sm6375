@@ -226,6 +226,7 @@ struct nfc_dev {
 	bool nfc_ven_enabled;
 	bool is_vreg_enabled;
 	bool is_ese_session_active;
+        bool release_read;
 	union {
 		struct i2c_dev i2c_dev;
 		struct i3c_dev i3c_dev;
@@ -252,6 +253,7 @@ struct nfc_dev {
 };
 
 int nfc_dev_open(struct inode *inode, struct file *filp);
+int nfc_dev_flush(struct file *pfile, fl_owner_t id);
 int nfc_dev_close(struct inode *inode, struct file *filp);
 long nfc_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg);
 int nfc_parse_dt(struct device *dev, struct platform_gpio *nfc_gpio,

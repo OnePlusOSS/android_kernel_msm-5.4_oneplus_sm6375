@@ -109,6 +109,11 @@ static const char * const icnss_pdr_cause[] = {
 	[ICNSS_HOST_ERROR] = "Host error",
 };
 
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+static unsigned int cnssprobestate = 0;
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
+
 static void icnss_set_plat_priv(struct icnss_priv *priv)
 {
 	penv = priv;
@@ -709,6 +714,9 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 	if (priv->vbatt_supported)
 		icnss_init_vph_monitor(priv);
 
+	if (priv->psf_supported)
+		queue_work(priv->soc_update_wq, &priv->soc_update_work);
+
 	return ret;
 
 device_info_failure:
@@ -731,6 +739,9 @@ static int icnss_driver_event_server_exit(struct icnss_priv *priv)
 	if (priv->adc_tm_dev && priv->vbatt_supported)
 		adc_tm_disable_chan_meas(priv->adc_tm_dev,
 					  &priv->vph_monitor_params);
+
+	if (priv->psf_supported)
+		priv->last_updated_voltage = 0;
 
 	return 0;
 }
@@ -3584,6 +3595,13 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 		goto put_vreg;
 	}
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,psf-supported")) {
+		ret = icnss_get_psf_info(priv);
+		if (ret < 0)
+			goto out;
+		priv->psf_supported = true;
+	}
+
 	if (priv->device_id == ADRASTEA_DEVICE_ID) {
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						   "membase");
@@ -3933,6 +3951,41 @@ static inline void icnss_runtime_pm_deinit(struct icnss_priv *priv)
 	pm_runtime_put_sync(&priv->pdev->dev);
 }
 
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+static void icnss_create_fw_state_kobj(void);
+static ssize_t icnss_show_fw_ready(struct device_driver *driver, char *buf)
+{
+	bool firmware_ready = false;
+	bool bdfloadsuccess = false;
+	bool regdbloadsuccess = false;
+	bool cnssprobesuccess = false;
+	if (!penv) {
+           icnss_pr_err("icnss_show_fw_ready plat_env is NULL!\n");
+	} else {
+           firmware_ready = test_bit(ICNSS_FW_READY, &penv->state);
+           regdbloadsuccess = test_bit(CNSS_LOAD_REGDB_SUCCESS, &penv->loadRegdbState);
+           bdfloadsuccess = test_bit(CNSS_LOAD_BDF_SUCCESS, &penv->loadBdfState);
+	}
+	cnssprobesuccess = (cnssprobestate == CNSS_PROBE_SUCCESS);
+	return sprintf(buf, "%s:%s:%s:%s",
+           (firmware_ready ? "fwstatus_ready" : "fwstatus_not_ready"),
+           (regdbloadsuccess ? "regdb_loadsuccess" : "regdb_loadfail"),
+           (bdfloadsuccess ? "bdf_loadsuccess" : "bdf_loadfail"),
+           (cnssprobesuccess ? "cnssprobe_success" : "cnssprobe_fail")
+           );
+}
+
+struct driver_attribute fw_ready_attr = {
+	.attr = {
+		.name = "firmware_ready",
+		.mode = S_IRUGO,
+	},
+	.show = icnss_show_fw_ready,
+	//read only so we don't need to impl store func
+};
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
+
 static inline bool icnss_use_nv_mac(struct icnss_priv *priv)
 {
 	return of_property_read_bool(priv->pdev->dev.of_node,
@@ -4005,6 +4058,11 @@ static int icnss_probe(struct platform_device *pdev)
 	icnss_allow_recursive_recovery(dev);
 
 	icnss_init_control_params(priv);
+
+	#ifdef OPLUS_FEATURE_SWITCH_CHECK
+	//Add for: check fw status for switch issue
+	icnss_create_fw_state_kobj();
+	#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 
 	ret = icnss_resource_parse(priv);
 	if (ret)
@@ -4089,6 +4147,11 @@ static int icnss_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&priv->icnss_tcdev_list);
 
+	#ifdef OPLUS_FEATURE_SWITCH_CHECK
+	//Add for: check fw status for switch issue
+	cnssprobestate = CNSS_PROBE_SUCCESS;
+	#endif /* OPLUS_FEATURE_SWITCH_CHECK */
+
 	icnss_pr_info("Platform driver probed successfully\n");
 
 	return 0;
@@ -4103,7 +4166,23 @@ out_free_resources:
 	icnss_put_resources(priv);
 out_reset_drvdata:
 	dev_set_drvdata(dev, NULL);
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+	cnssprobestate = CNSS_PROBE_FAIL;
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 	return ret;
+}
+
+static void icnss_unregister_power_supply_notifier(struct icnss_priv *priv)
+{
+	if (priv->batt_psy)
+		power_supply_put(penv->batt_psy);
+
+	if (priv->psf_supported) {
+		flush_workqueue(priv->soc_update_wq);
+		destroy_workqueue(priv->soc_update_wq);
+		power_supply_unreg_notifier(&priv->psf_nb);
+	}
 }
 
 static int icnss_remove(struct platform_device *pdev)
@@ -4124,6 +4203,8 @@ static int icnss_remove(struct platform_device *pdev)
 	device_init_wakeup(&priv->pdev->dev, false);
 
 	icnss_debugfs_destroy(priv);
+
+	icnss_unregister_power_supply_notifier(penv);
 
 	icnss_sysfs_destroy(priv);
 
@@ -4383,6 +4464,15 @@ static struct platform_driver icnss_driver = {
 		.of_match_table = icnss_dt_match,
 	},
 };
+
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+static void icnss_create_fw_state_kobj(void) {
+	if (driver_create_file(&(icnss_driver.driver), &fw_ready_attr)) {
+		icnss_pr_info("failed to create %s", fw_ready_attr.attr.name);
+	}
+}
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 
 static int __init icnss_initialize(void)
 {

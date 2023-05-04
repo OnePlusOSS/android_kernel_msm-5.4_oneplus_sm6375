@@ -373,7 +373,14 @@ void kgsl_process_init_sysfs(struct kgsl_device *device,
 				memtypes[i].attr.name);
 	}
 }
-
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+unsigned long gpu_total(void)
+{
+	return (unsigned long)atomic_long_read(&kgsl_driver.stats.page_alloc);
+}
+#endif /* CONFIG_OPLUS_HEALTHINFO */
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 static ssize_t memstat_show(struct device *dev,
 			 struct device_attribute *attr, char *buf)
 {

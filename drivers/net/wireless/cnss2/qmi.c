@@ -808,6 +808,11 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 	struct qmi_txn txn;
 	int ret;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_MAC)
+	int i;
+	char revert_mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_MAC */
+
 	if (!plat_priv || !mac || mac_len != QMI_WLFW_MAC_ADDR_SIZE_V01)
 		return -EINVAL;
 
@@ -822,7 +827,16 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 
 		cnss_pr_dbg("Sending WLAN mac req [%pM], state: 0x%lx\n",
 			    mac, plat_priv->driver_state);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_MAC)
+	for (i = 0; i < QMI_WLFW_MAC_ADDR_SIZE_V01 ; i ++){
+		revert_mac[i] = mac[QMI_WLFW_MAC_ADDR_SIZE_V01 - i -1];
+	}
+		cnss_pr_dbg("Sending revert WLAN mac req [%pM], state: 0x%lx\n",
+			    revert_mac, plat_priv->driver_state);
+	memcpy(req.mac_addr, revert_mac, mac_len);
+#else
 	memcpy(req.mac_addr, mac, mac_len);
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_MAC */
 	req.mac_addr_valid = 1;
 
 	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,

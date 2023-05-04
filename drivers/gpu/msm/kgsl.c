@@ -30,6 +30,14 @@
 #include "kgsl_sync.h"
 #include "kgsl_sysfs.h"
 #include "kgsl_trace.h"
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+#include <linux/reserve_area.h>
+#endif
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched.h>
+#define SA_TYPE_LIGHT    (1 << 0)
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 #ifndef arch_mmap_check
 #define arch_mmap_check(addr, len, flags)	(0)
@@ -345,6 +353,8 @@ static void kgsl_destroy_ion(struct kgsl_memdesc *memdesc)
 
 	if (meta != NULL) {
 		remove_dmabuf_list(meta);
+		dma_buf_unmap_attachment(meta->attach, meta->table,
+		DMA_BIDIRECTIONAL);
 		dma_buf_detach(meta->dmabuf, meta->attach);
 		dma_buf_put(meta->dmabuf);
 		kfree(meta);
@@ -681,8 +691,7 @@ int kgsl_context_init(struct kgsl_device_private *dev_priv,
 		 * flushing the event workqueue just in case there are
 		 * detached contexts waiting to finish
 		 */
-
-		flush_workqueue(device->events_wq);
+		kthread_flush_worker(&kgsl_driver.ev_worker);
 		id = _kgsl_get_context_id(device);
 	}
 
@@ -1299,9 +1308,9 @@ kgsl_sharedmem_find(struct kgsl_process_private *private, uint64_t gpuaddr)
 	if (!private)
 		return NULL;
 
-	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr) &&
+	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr, 0) &&
 		!kgsl_mmu_gpuaddr_in_range(
-			private->pagetable->mmu->securepagetable, gpuaddr))
+			private->pagetable->mmu->securepagetable, gpuaddr, 0))
 		return NULL;
 
 	spin_lock(&private->mem_lock);
@@ -2093,7 +2102,7 @@ long kgsl_ioctl_gpu_aux_command(struct kgsl_device_private *dev_priv,
 
 	cmdlist = u64_to_user_ptr(param->cmdlist);
 
-	 /* Create a draw object for KGSL_GPU_AUX_COMMAND_TIMELINE */
+	/* Create a draw object for KGSL_GPU_AUX_COMMAND_TIMELINE */
 	if (copy_struct_from_user(&generic, sizeof(generic),
 		cmdlist, param->cmdsize)) {
 		ret = -EFAULT;
@@ -2239,7 +2248,7 @@ static void gpumem_free_func(struct kgsl_device *device,
 			entry->memdesc.gpuaddr, entry->memdesc.size,
 			entry->memdesc.flags);
 
-	kgsl_mem_entry_put(entry);
+	kgsl_mem_entry_put_deferred(entry);
 }
 
 static long gpumem_free_entry_on_timestamp(struct kgsl_device *device,
@@ -2571,15 +2580,6 @@ static int kgsl_setup_anon_useraddr(struct kgsl_pagetable *pagetable,
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER
-static int match_file(const void *p, struct file *file, unsigned int fd)
-{
-	/*
-	 * We must return fd + 1 because iterate_fd stops searching on
-	 * non-zero return, but 0 is a valid fd.
-	 */
-	return (p == file) ? (fd + 1) : 0;
-}
-
 static void _setup_cache_mode(struct kgsl_mem_entry *entry,
 		struct vm_area_struct *vma)
 {
@@ -2616,8 +2616,6 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 	vma = find_vma(current->mm, hostptr);
 
 	if (vma && vma->vm_file) {
-		int fd;
-
 		ret = check_vma_flags(vma, entry->memdesc.flags);
 		if (ret) {
 			up_read(&current->mm->mmap_sem);
@@ -2633,15 +2631,10 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 			return -EFAULT;
 		}
 
-		/* Look for the fd that matches this the vma file */
-		fd = iterate_fd(current->files, 0, match_file, vma->vm_file);
-		if (fd != 0) {
-			dmabuf = dma_buf_get(fd - 1);
-			if (IS_ERR(dmabuf)) {
-				up_read(&current->mm->mmap_sem);
-				return PTR_ERR(dmabuf);
-			}
-		}
+		/* Take a refcount because dma_buf_put() decrements the refcount */
+		get_file(vma->vm_file);
+
+		dmabuf = vma->vm_file->private_data;
 	}
 
 	if (!dmabuf) {
@@ -3004,8 +2997,6 @@ static int kgsl_setup_dma_buf(struct kgsl_device *device,
 		ret = PTR_ERR(sg_table);
 		goto out;
 	}
-
-	dma_buf_unmap_attachment(attach, sg_table, DMA_BIDIRECTIONAL);
 
 	meta->table = sg_table;
 	entry->priv_data = meta;
@@ -4164,6 +4155,9 @@ kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 					       pid_nr(private->pid), addr, pgoff, len,
 					       (int) val);
 	}
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+	update_oom_pid_and_time(len, val, flags);
+#endif
 
 	kgsl_mem_entry_put(entry);
 	return val;
@@ -4496,15 +4490,6 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	idr_init(&device->timelines);
 	spin_lock_init(&device->timelines_lock);
 
-	device->events_wq = alloc_workqueue("kgsl-events",
-		WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS | WQ_HIGHPRI, 0);
-
-	if (!device->events_wq) {
-		dev_err(device->dev, "Failed to allocate events workqueue\n");
-		status = -ENOMEM;
-		goto error_pwrctrl_close;
-	}
-
 	/* This can return -EPROBE_DEFER */
 	status = kgsl_mmu_probe(device);
 	if (status != 0)
@@ -4523,11 +4508,6 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	return 0;
 
 error_pwrctrl_close:
-	if (device->events_wq) {
-		destroy_workqueue(device->events_wq);
-		device->events_wq = NULL;
-	}
-
 	kgsl_pwrctrl_close(device);
 error:
 	_unregister_device(device);
@@ -4536,11 +4516,6 @@ error:
 
 void kgsl_device_platform_remove(struct kgsl_device *device)
 {
-	if (device->events_wq) {
-		destroy_workqueue(device->events_wq);
-		device->events_wq = NULL;
-	}
-
 	kgsl_device_snapshot_close(device);
 
 	if (device->gpu_sysfs_kobj.state_initialized)
@@ -4611,6 +4586,7 @@ int __init kgsl_core_init(void)
 {
 	int result = 0;
 	struct sched_param param = { .sched_priority = 2 };
+	struct sched_param param2 = { .sched_priority = 97 };
 
 	place_marker("M - DRIVER KGSL Init");
 
@@ -4697,6 +4673,17 @@ int __init kgsl_core_init(void)
 
 	kthread_init_worker(&kgsl_driver.worker);
 
+	kthread_init_worker(&kgsl_driver.ev_worker);
+
+	kgsl_driver.ev_worker_thread =
+		kthread_run(kthread_worker_fn, &kgsl_driver.ev_worker,
+			    "kgsl_ev_worker_thread");
+
+	if (IS_ERR(kgsl_driver.ev_worker_thread)) {
+		pr_err("unable to start kgsl_ev_worker_thread\n");
+		goto err;
+	}
+
 	kgsl_driver.worker_thread = kthread_run(kthread_worker_fn,
 		&kgsl_driver.worker, "kgsl_worker_thread");
 
@@ -4706,7 +4693,11 @@ int __init kgsl_core_init(void)
 	}
 
 	sched_setscheduler(kgsl_driver.worker_thread, SCHED_FIFO, &param);
-
+	sched_setscheduler_nocheck(kgsl_driver.ev_worker_thread, SCHED_FIFO,
+                                  &param2);
+        #if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	kgsl_driver.worker_thread->ux_state = SA_TYPE_LIGHT;
+        #endif
 	kgsl_events_init();
 
 	result = kgsl_drawobjs_cache_init();

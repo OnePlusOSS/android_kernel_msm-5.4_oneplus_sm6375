@@ -614,7 +614,7 @@ enum holi_functions {
 static const char * const gpio_groups[] = {
 	"gpio0", "gpio1", "gpio2", "gpio3", "gpio4", "gpio5", "gpio6", "gpio7",
 	"gpio8", "gpio9", "gpio10", "gpio11", "gpio12", "gpio13", "gpio14",
-	"gpio15", "gpio16", "gpio17", "gpio18", "gpio18", "gpio19", "gpio20",
+	"gpio15", "gpio16", "gpio17",/*"gpio18",*/"gpio18", "gpio19", "gpio20",
 	"gpio21", "gpio22", "gpio23", "gpio24", "gpio25", "gpio26", "gpio27",
 	"gpio28", "gpio29", "gpio30", "gpio31", "gpio32", "gpio33", "gpio34",
 	"gpio35", "gpio36", "gpio37", "gpio38", "gpio39", "gpio40", "gpio41",
@@ -645,7 +645,7 @@ static const char * const CCI_ASYNC_groups[] = {
 	"gpio35", "gpio36", "gpio48", "gpio52", "gpio53",
 };
 static const char * const CCI_I2C_groups[] = {
-	"gpio2", "gpio3", "gpio39", "gpio40", "gpio41", "gpio42", "gpio43",
+	/*"gpio2", "gpio3", */"gpio39", "gpio40", "gpio41", "gpio42", "gpio43",
 	"gpio44",
 };
 static const char * const GPS_TX_groups[] = {

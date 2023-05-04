@@ -13,6 +13,7 @@
 #include <linux/kobject.h>
 #include <linux/platform_device.h>
 #include <linux/ipc_logging.h>
+#include <linux/power_supply.h>
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <soc/qcom/icnss2.h>
 #include <soc/qcom/service-locator.h>
@@ -164,6 +165,11 @@ struct icnss_clk_cfg {
 	const char *name;
 	u32 freq;
 	u32 required;
+};
+
+struct icnss_battery_level {
+	int lower_battery_threshold;
+	int ldo_voltage;
 };
 
 struct icnss_clk_info {
@@ -465,7 +471,30 @@ struct icnss_priv {
 	struct icnss_dms_data dms;
 	u8 use_nv_mac;
 	u32 wlan_en_delay_ms;
+	bool psf_supported;
+	struct notifier_block psf_nb;
+	struct power_supply *batt_psy;
+	int last_updated_voltage;
+	struct work_struct soc_update_work;
+	struct workqueue_struct *soc_update_wq;
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+	unsigned long loadBdfState;
+	unsigned long loadRegdbState;
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 };
+
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+enum cnss_load_state {
+	CNSS_LOAD_BDF_FAIL = 1,
+	CNSS_LOAD_BDF_SUCCESS,
+	CNSS_LOAD_REGDB_FAIL,
+	CNSS_LOAD_REGDB_SUCCESS,
+	CNSS_PROBE_FAIL,
+	CNSS_PROBE_SUCCESS,
+};
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 
 struct icnss_reg_info {
 	uint32_t mem_type;

@@ -56,6 +56,9 @@
 #include <asm/scs.h>
 #include <asm/stacktrace.h>
 #include <trace/hooks/minidump.h>
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE)
+#include <soc/oplus/system/qcom_minidump_enhance.h>
+#endif
 
 #if defined(CONFIG_STACKPROTECTOR) && !defined(CONFIG_STACKPROTECTOR_PER_TASK)
 #include <linux/stackprotector.h>
@@ -66,7 +69,11 @@ EXPORT_SYMBOL(__stack_chk_guard);
 /*
  * Function pointers to optional machine specific functions
  */
+#if !IS_ENABLED(CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE)
 void (*pm_power_off)(void);
+#else /* for system crashed at early boot time. at that time maybe pm_power_off not defined */
+void (*pm_power_off)(void) = do_poweroff_early;
+#endif
 EXPORT_SYMBOL_GPL(pm_power_off);
 
 static void __cpu_do_idle(void)
@@ -265,6 +272,9 @@ void __show_regs(struct pt_regs *regs)
 		top_reg = 29;
 	}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE)
+	dumpcpuregs(regs);
+#endif
 	trace_android_vh_show_regs(regs);
 	show_regs_print_info(KERN_DEFAULT);
 	print_pstate(regs);
@@ -272,6 +282,10 @@ void __show_regs(struct pt_regs *regs)
 	if (!user_mode(regs)) {
 		printk("pc : %pS\n", (void *)regs->pc);
 		printk("lr : %pS\n", (void *)lr);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE)
+		printk("pc : %016llx\n", regs->pc);
+		printk("lr : %016llx\n", lr);
+#endif
 	} else {
 		printk("pc : %016llx\n", regs->pc);
 		printk("lr : %016llx\n", lr);
@@ -601,6 +615,41 @@ out:
 	put_task_stack(p);
 	return ret;
 }
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+static unsigned long backtrace[4];
+
+unsigned long* get_backtrace(struct task_struct *p)
+{
+        struct stackframe frame;
+        unsigned long stack_page = 0;
+        int count = 0;
+	int layer_count = 0;
+	memset(backtrace, 0, 4);
+        if (!p || p == current || p->state == TASK_RUNNING)
+                return NULL;
+
+        stack_page = (unsigned long)try_get_task_stack(p);
+        if (!stack_page)
+                return NULL;
+ 	start_backtrace(&frame, thread_saved_fp(p), thread_saved_pc(p));
+
+        do {
+                if (unwind_frame(p, &frame))
+                        goto out;
+                if (!in_sched_functions(frame.pc) ) {
+			backtrace[layer_count] = frame.pc;
+			layer_count++;
+			if(layer_count == 4) {
+                        	goto out;
+			}
+                }
+        } while (count ++ < 16);
+
+out:
+        put_task_stack(p);
+        return backtrace;
+}
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
 
 unsigned long arch_align_stack(unsigned long sp)
 {
