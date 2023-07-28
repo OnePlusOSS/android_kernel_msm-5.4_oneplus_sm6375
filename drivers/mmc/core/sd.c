@@ -1611,8 +1611,8 @@ int mmc_attach_sd(struct mmc_host *host)
 #endif /* CONFIG_EMMC_SDCARD_OPTIMIZE */
 	err = mmc_send_app_op_cond(host, 0, &ocr);
 	if (err) {
-		pr_err("first mmc_send_app_op_cond fail, retry after 500ms delay\n");
-		mmc_delay(500);
+		pr_err("first mmc_send_app_op_cond fail, retry after 50ms delay\n");
+		mmc_delay(50);
 		err = mmc_send_app_op_cond(host, 0, &ocr);
 		if (err)
 		{
