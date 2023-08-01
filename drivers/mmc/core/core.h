@@ -35,6 +35,11 @@ struct mmc_bus_ops {
 #if defined(CONFIG_SDC_QTI)
 	int (*change_bus_speed)(struct mmc_host *host, unsigned long *freq);
 #endif
+
+#ifdef CONFIG_MMC_PASSWORDS
+	int (*sysfs_add)(struct mmc_host *, struct mmc_card *card);
+	void (*sysfs_remove)(struct mmc_host *, struct mmc_card *card);
+#endif
 };
 
 void mmc_attach_bus(struct mmc_host *host, const struct mmc_bus_ops *ops);
@@ -77,6 +82,7 @@ static inline void mmc_delay(unsigned int ms)
 
 void mmc_rescan(struct work_struct *work);
 void mmc_start_host(struct mmc_host *host);
+void __mmc_stop_host(struct mmc_host *host);
 void mmc_stop_host(struct mmc_host *host);
 
 void _mmc_detect_change(struct mmc_host *host, unsigned long delay,

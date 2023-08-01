@@ -13,6 +13,10 @@
 #include "kgsl_pool.h"
 #include "kgsl_sharedmem.h"
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+#include "common.h"
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
+
 /*
  * The user can set this from debugfs to force failed memory allocations to
  * fail without trying OOM first.  This is a debug setting useful for
@@ -373,7 +377,14 @@ void kgsl_process_init_sysfs(struct kgsl_device *device,
 				memtypes[i].attr.name);
 	}
 }
-
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+unsigned long gpu_total(void)
+{
+	return (unsigned long)atomic_long_read(&kgsl_driver.stats.page_alloc);
+}
+#endif /* CONFIG_OPLUS_HEALTHINFO */
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 static ssize_t memstat_show(struct device *dev,
 			 struct device_attribute *attr, char *buf)
 {
@@ -1476,3 +1487,49 @@ bool kgsl_sharedmem_get_noretry(void)
 {
 	return sharedmem_noretry_flag;
 }
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+
+void dump_kgsl_process_mem_detail(struct kgsl_process_private *priv)
+{
+	int i = 0;
+	int id = 0;
+	struct kgsl_mem_entry *entry = NULL;
+	uint64_t memtype_detail[KGSL_MEMTYPE_KERNEL + 1] = {0};
+
+	spin_lock(&priv->mem_lock);
+	for (entry = idr_get_next(&priv->mem_idr, &id); entry;
+		id++, entry = idr_get_next(&priv->mem_idr, &id)) {
+		struct kgsl_memdesc *memdesc;
+		unsigned int type;
+
+		if (!kgsl_mem_entry_get(entry))
+			continue;
+
+		/*
+		 * we must unlock the mem_lock
+		 * This is to avoid a deadlock where we put back last reference of the
+		 * process mem entry (via kgsl_mem_entry_put_deferred)
+		 */
+		spin_unlock(&priv->mem_lock);
+
+		memdesc = &entry->memdesc;
+		type = kgsl_memdesc_get_memtype(memdesc);
+
+		if (type <= KGSL_MEMTYPE_KERNEL)
+			memtype_detail[type] += memdesc->size;
+
+		kgsl_mem_entry_put_deferred(entry);
+		spin_lock(&priv->mem_lock);
+	}
+	spin_unlock(&priv->mem_lock);
+
+	osvelte_info("%-16s %-5s \n", "memtype", "size");
+
+	for (i = 0; i <= KGSL_MEMTYPE_KERNEL; i++) {
+		if (memtype_detail[i] > 0)
+			osvelte_info("%-16d %-5d\n", i, memtype_detail[i] / SZ_1K);
+	}
+}
+
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */

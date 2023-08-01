@@ -25,6 +25,12 @@
 #include "kgsl_sharedmem.h"
 #include "kgsl_trace.h"
 
+#ifdef OPLUS_BUG_STABILITY
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+#include <soc/oplus/system/oplus_mm_kevent_fb.h>
+#endif
+#endif /*OPLUS_BUG_STABILITY*/
+
 #define _IOMMU_PRIV(_mmu) (&((_mmu)->priv.iommu))
 
 
@@ -607,6 +613,7 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	char *comm = "unknown";
 	bool skip_fault = false;
 	struct kgsl_process_private *private;
+	struct kgsl_context *context= NULL;
 
 	static DEFINE_RATELIMIT_STATE(_rs,
 					DEFAULT_RATELIMIT_INTERVAL,
@@ -680,8 +687,25 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 		no_page_fault_log = kgsl_mmu_log_fault_addr(mmu, ptbase, addr);
 
 	if (!no_page_fault_log && __ratelimit(&_rs)) {
-		struct kgsl_context *context = kgsl_context_get(device,
-							contextidr);
+		#ifdef OPLUS_BUG_STABILITY
+		#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+		#ifdef NEED_FEEDBACK_TO_DISPLAY
+		mm_fb_kevent(OPLUS_MM_DIRVER_FB_EVENT_DISPLAY,
+		    OPLUS_DISPLAY_EVENTID_GPU_FAULT,
+		    "kgsl error", MM_FB_KEY_RATELIMIT_1H,
+		    "EventID@@%d$$gpu fault$$pid=%08lx,comm=%d",
+		    OPLUS_MM_DIRVER_FB_EVENT_ID_GPU_FAULT, ptname, comm);
+		#else
+		//feedback to atlas
+		mm_fb_kevent(OPLUS_MM_DIRVER_FB_EVENT_DISPLAY,
+		    OPLUS_DISPLAY_EVENTID_GPU_FAULT,
+		    "gpu fault", MM_FB_KEY_RATELIMIT_1H,
+		    "pid=%08lx,comm=%d", ptname, comm);
+		#endif //NEED_FEEDBACK_TO_DISPLAY
+		#endif //CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+		#endif /*OPLUS_BUG_STABILITY*/
+
+		context = kgsl_context_get(device, contextidr);
 
 		dev_crit(ctx->kgsldev->dev,
 			"GPU PAGE FAULT: addr = %lX pid= %d name=%s drawctxt=%d context pid = %d\n",
@@ -2287,20 +2311,20 @@ static int kgsl_iommu_svm_range(struct kgsl_pagetable *pagetable,
 }
 
 static bool kgsl_iommu_addr_in_range(struct kgsl_pagetable *pagetable,
-		uint64_t gpuaddr)
+		uint64_t gpuaddr, uint64_t size)
 {
 	struct kgsl_iommu_pt *pt = pagetable->priv;
 
 	if (gpuaddr == 0)
 		return false;
 
-	if (gpuaddr >= pt->va_start && gpuaddr < pt->va_end)
+	if (gpuaddr >= pt->va_start && (gpuaddr + size) < pt->va_end)
 		return true;
 
-	if (gpuaddr >= pt->compat_va_start && gpuaddr < pt->compat_va_end)
+	if (gpuaddr >= pt->compat_va_start && (gpuaddr + size) < pt->compat_va_end)
 		return true;
 
-	if (gpuaddr >= pt->svm_start && gpuaddr < pt->svm_end)
+	if (gpuaddr >= pt->svm_start && (gpuaddr + size) < pt->svm_end)
 		return true;
 
 	return false;

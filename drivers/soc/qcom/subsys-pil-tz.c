@@ -28,6 +28,17 @@
 
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+#include <soc/oplus/system/dump_reason.h>
+#endif
+
+#ifdef OPLUS_FEATURE_MM_FEEDBACK
+#include <soc/oplus/system/oplus_mm_kevent_fb.h>
+#endif
+
+#ifdef OPLUS_FEATURE_SENSOR_FEEDBACK
+#include <soc/oplus/system/kernel_fb.h>
+#endif
 
 #include "peripheral-loader.h"
 
@@ -758,10 +769,23 @@ static struct pil_reset_ops pil_ops_trusted = {
 	.deinit_image = pil_deinit_image_trusted,
 };
 
+#ifdef OPLUS_FEATURE_SENSOR_FEEDBACK
+extern void set_subsys_crash_cause(char *reason);
+#endif
+
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+//Add for customized subsystem ramdump to skip generate dump cause by SAU
+bool SKIP_GENERATE_RAMDUMP = false;
+extern void mdmreason_set(char * buf);
+#endif
+
 static void log_failure_reason(const struct pil_tz_data *d)
 {
 	size_t size;
 	char *smem_reason, reason[MAX_SSR_REASON_LEN];
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+	char *function_name;
+#endif /*CONFIG_OPLUS_FEATURE_DUMP_REASON*/
 	const char *name = d->subsys_desc.name;
 
 	if (d->smem_id == -1)
@@ -775,11 +799,67 @@ static void log_failure_reason(const struct pil_tz_data *d)
 	}
 	if (!smem_reason[0]) {
 		pr_err("%s SFR: (unknown, empty string found).\n", name);
+		#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+		if (!strncmp(name, "modem", 5) || !strncmp(name, "adsp", 4)) {
+			subsystem_schedule_crash_uevent_work(d->dev, name, 0);
+		}
+		#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
+		#ifdef OPLUS_FEATURE_SWITCH_CHECK
+		/* Add for: check fw status for switch issue */
+		wlan_subsystem_send_uevent(d->subsys, reason, name);
+		#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 		return;
 	}
 
 	strlcpy(reason, smem_reason, min(size, (size_t)MAX_SSR_REASON_LEN));
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+	function_name = parse_function_builtin_return_address((unsigned long)__builtin_return_address(0));
+	save_dump_reason_to_smem(reason, function_name);
+#endif /*CONFIG_OPLUS_FEATURE_DUMP_REASON*/
+	#ifdef OPLUS_FEATURE_SENSOR_FEEDBACK
+	set_subsys_crash_cause(reason);
+	if((strncmp(name, "slpi", strlen("slpi")) == 0)
+		|| (strncmp(name, "cdsp", strlen("cdsp")) == 0)
+		|| (strncmp(name, "adsp", strlen("adsp")) == 0)) {
+		strcat(reason, "$$module@@");
+		strcat(reason, name);
+		oplus_kevent_fb_str(FB_SENSOR, FB_SENSOR_ID_CRASH, reason);
+	}
+	#endif
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
+	#ifdef OPLUS_FEATURE_SWITCH_CHECK
+	/* Add for: check fw status for switch issue */
+	wlan_subsystem_send_uevent(d->subsys, reason, name);
+	pr_info("Restart sequence requested  test2");
+	#endif /* OPLUS_FEATURE_SWITCH_CHECK */
+
+	#ifdef OPLUS_FEATURE_MM_FEEDBACK
+	if (strncmp(name, "adsp", strlen("adsp")) == 0) {
+		mm_fb_audio_kevent_named(OPLUS_AUDIO_EVENTID_ADSP_CRASH, \
+				MM_FB_KEY_RATELIMIT_5MIN, "FieldData@@%s$$detailData@@audio$$module@@adsp", reason);
+	}
+	#endif
+
+	#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+	if (!strncmp(name, "modem", 5)) {
+		mdmreason_set(reason);
+
+		pr_err("oplus debug modem subsystem failure reason: %s.\n", reason);
+
+		if (strstr(reason, "OPLUS_MODEM_NO_RAMDUMP_EXPECTED") || strstr(reason, "oplusmsg:go_to_error_fatal")) {
+			pr_err("%s will subsys reset", __func__);
+			SKIP_GENERATE_RAMDUMP = true;
+		}
+
+		pr_err("[crash_log]: %s to schedule crash work1!\n", name);
+		subsystem_schedule_crash_uevent_work(d->dev, name, reason);
+	}
+
+	if (!strncmp(name, "adsp", 4)) {
+		pr_err("[crash_log]: %s to schedule crash work2!\n", name);
+		subsystem_schedule_crash_uevent_work(d->dev, name, reason);
+	}
+	#endif
 }
 
 static int subsys_shutdown(const struct subsys_desc *subsys, bool force_stop)

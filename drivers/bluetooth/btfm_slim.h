@@ -28,6 +28,7 @@
 #define PGD	1
 #define IFD	0
 
+#define OPLUS_BT_SLIM_MODIFY 1
 
 /* Codec driver defines */
 enum {

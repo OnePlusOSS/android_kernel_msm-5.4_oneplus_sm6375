@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
 
 #include <linux/firmware.h>
 #include <linux/module.h>
@@ -808,6 +810,11 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 	struct qmi_txn txn;
 	int ret;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_MAC)
+	int i;
+	char revert_mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_MAC */
+
 	if (!plat_priv || !mac || mac_len != QMI_WLFW_MAC_ADDR_SIZE_V01)
 		return -EINVAL;
 
@@ -822,7 +829,16 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 
 		cnss_pr_dbg("Sending WLAN mac req [%pM], state: 0x%lx\n",
 			    mac, plat_priv->driver_state);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_MAC)
+	for (i = 0; i < QMI_WLFW_MAC_ADDR_SIZE_V01 ; i ++){
+		revert_mac[i] = mac[QMI_WLFW_MAC_ADDR_SIZE_V01 - i -1];
+	}
+		cnss_pr_dbg("Sending revert WLAN mac req [%pM], state: 0x%lx\n",
+			    revert_mac, plat_priv->driver_state);
+	memcpy(req.mac_addr, revert_mac, mac_len);
+#else
 	memcpy(req.mac_addr, mac, mac_len);
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_MAC */
 	req.mac_addr_valid = 1;
 
 	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
@@ -2206,7 +2222,8 @@ static void cnss_wlfw_request_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 			    ind_msg->mem_seg[i].size, ind_msg->mem_seg[i].type);
 		plat_priv->fw_mem[i].type = ind_msg->mem_seg[i].type;
 		plat_priv->fw_mem[i].size = ind_msg->mem_seg[i].size;
-		if (plat_priv->fw_mem[i].type == CNSS_MEM_TYPE_DDR)
+		if (!plat_priv->fw_mem[i].va &&
+		    plat_priv->fw_mem[i].type == CNSS_MEM_TYPE_DDR)
 			plat_priv->fw_mem[i].attrs |=
 				DMA_ATTR_FORCE_CONTIGUOUS;
 	}

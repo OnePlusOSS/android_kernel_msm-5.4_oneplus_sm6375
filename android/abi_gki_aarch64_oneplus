@@ -873,6 +873,8 @@
   __tasklet_schedule
   thermal_cooling_device_unregister
   thermal_of_cooling_device_register
+  thermal_zone_device_register
+  thermal_zone_device_unregister
   _totalram_pages
   __trace_bprintk
   trace_define_field
@@ -1260,6 +1262,12 @@
   power_supply_get_drvdata
   round_jiffies_relative
   schedule_timeout_interruptible
+  rt_pd_manager_init
+  rt_pd_manager_exit
+  oplus_pd_connected
+  oplus_pd_without_usb
+  oplus_start_usb_peripheral
+  oplus_pps_stop
 
 # required by qseecom-mod.ko
   __arch_copy_in_user
@@ -1410,6 +1418,7 @@
   video_device_alloc
   video_device_release
   video_device_release_empty
+  i2c_unregister_device
 
 # required by msm_sharedmem.ko
   __uio_register_device
@@ -1956,6 +1965,8 @@
   kill_fasync
   __module_get
   put_disk
+  scsi_change_queue_depth
+  scsi_print_command
   scsi_autopm_get_device
   scsi_autopm_put_device
   scsi_block_when_processing_errors
@@ -2269,6 +2280,7 @@
   sdhci_reset
   sdhci_set_bus_width
   sdhci_setup_host
+  __sdhci_set_timeout
 
 # required by btpower.ko
   regulator_get_voltage

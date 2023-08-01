@@ -27,6 +27,9 @@
 #include <linux/notifier.h>
 #include <linux/suspend.h>
 #include <linux/slab.h>
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#include "../../drivers/soc/oplus/oplus_wakelock/oplus_wakelock_profiler_qcom.h"
+#endif
 
 /*
  * struct wakeup_irq_node - stores data and relationships for IRQs logged as
@@ -290,9 +293,15 @@ static void print_wakeup_sources(void)
 				n->irq_name);
 	else if (wakeup_reason == RESUME_ABNORMAL)
 		pr_info("Resume caused by %s\n", non_irq_wake_reason);
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY) || !defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
 	else
 		pr_info("Resume cause unknown\n");
-
+#else
+	else {
+		pr_info("Resume cause unknown\n");
+		wakeup_reasons_statics("qmi", WS_CNT_MODEM);
+	}
+#endif
 	spin_unlock_irqrestore(&wakeup_reason_lock, flags);
 }
 
@@ -311,12 +320,20 @@ static ssize_t last_resume_reason_show(struct kobject *kobj,
 		spin_unlock_irqrestore(&wakeup_reason_lock, flags);
 		return buf_offset;
 	}
-
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (wakeup_reason == RESUME_IRQ && !list_empty(&leaf_irqs)) {
+		list_for_each_entry(n, &leaf_irqs, siblings)
+			buf_offset += scnprintf(buf + buf_offset,
+						PAGE_SIZE - buf_offset,
+						"%d %s\n", n->irq, (strncmp(n->irq_name, "ipcc_0", strlen("ipcc_0")) == 0) ? "qmi" : n->irq_name);
+	}
+	#else
 	if (wakeup_reason == RESUME_IRQ && !list_empty(&leaf_irqs))
 		list_for_each_entry(n, &leaf_irqs, siblings)
 			buf_offset += scnprintf(buf + buf_offset,
 						PAGE_SIZE - buf_offset,
 						"%d %s\n", n->irq, n->irq_name);
+	#endif
 	else if (wakeup_reason == RESUME_ABNORMAL)
 		buf_offset = scnprintf(buf, PAGE_SIZE, "-1 %s",
 				       non_irq_wake_reason);

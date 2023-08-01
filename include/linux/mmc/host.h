@@ -204,6 +204,9 @@ struct mmc_host_ops {
 #if defined(CONFIG_SDC_QTI)
 	int     (*notify_load)(struct mmc_host *host, enum mmc_load);
 #endif
+#ifdef CONFIG_MMC_PASSWORDS
+	int	(*sd_lock_reset)(struct mmc_host *host);
+#endif
 };
 
 struct mmc_cqe_ops {
@@ -538,6 +541,9 @@ struct mmc_host {
 
 	struct delayed_work	detect;
 	int			detect_change;	/* card detect flag */
+#ifdef CONFIG_EMMC_SDCARD_OPTIMIZE
+    int detect_change_retry;
+#endif
 	struct mmc_slot		slot;
 
 	const struct mmc_bus_ops *bus_ops;	/* current bus driver */

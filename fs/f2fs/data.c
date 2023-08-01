@@ -1392,7 +1392,11 @@ got_it:
 	return page;
 }
 
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+static int __allocate_data_block(struct dnode_of_data *dn, int seg_type, int contig_level)
+#else
 static int __allocate_data_block(struct dnode_of_data *dn, int seg_type)
+#endif
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dn->inode);
 	struct f2fs_summary sum;
@@ -1418,8 +1422,18 @@ static int __allocate_data_block(struct dnode_of_data *dn, int seg_type)
 alloc:
 	set_summary(&sum, dn->nid, dn->ofs_in_node, ni.version);
 	old_blkaddr = dn->data_blkaddr;
+#ifdef CONFIG_F2FS_BD_STAT
+	bd_lock(sbi);
+	bd_inc_array_val(sbi, hotcold_count, HC_DIRECT_IO, 1);
+	bd_unlock(sbi);
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+	f2fs_allocate_data_block(sbi, NULL, old_blkaddr, &dn->data_blkaddr,
+					&sum, seg_type, NULL, false, contig_level);
+#else
 	f2fs_allocate_data_block(sbi, NULL, old_blkaddr, &dn->data_blkaddr,
 					&sum, seg_type, NULL, false);
+#endif
 	if (GET_SEGNO(sbi, old_blkaddr) != NULL_SEGNO)
 		invalidate_mapping_pages(META_MAPPING(sbi),
 					old_blkaddr, old_blkaddr);
@@ -1513,10 +1527,14 @@ int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map,
 	struct extent_info ei = {0,0,0};
 	block_t blkaddr;
 	unsigned int start_pgofs;
-
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+	int contig_level;
+#endif
 	if (!maxblocks)
 		return 0;
-
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+	contig_level = check_io_seq(maxblocks);
+#endif
 	map->m_len = 0;
 	map->m_flags = 0;
 
@@ -1553,6 +1571,18 @@ next_dnode:
 		if (flag == F2FS_GET_BLOCK_BMAP)
 			map->m_pblk = 0;
 		if (err == -ENOENT) {
+			/*
+			 * There is one exceptional case that read_node_page()
+			 * may return -ENOENT due to filesystem has been
+			 * shutdown or cp_error, so force to convert error
+			 * number to EIO for such case.
+			 */
+			if (map->m_may_create &&
+				(is_sbi_flag_set(sbi, SBI_IS_SHUTDOWN) ||
+				f2fs_cp_error(sbi))) {
+				err = -EIO;
+				goto unlock_out;
+			}
 			err = 0;
 			if (map->m_next_pgofs)
 				*map->m_next_pgofs =
@@ -1582,7 +1612,11 @@ next_block:
 		/* use out-place-update for driect IO under LFS mode */
 		if (f2fs_lfs_mode(sbi) && flag == F2FS_GET_BLOCK_DIO &&
 							map->m_may_create) {
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+			err = __allocate_data_block(&dn, map->m_seg_type, contig_level);
+#else
 			err = __allocate_data_block(&dn, map->m_seg_type);
+#endif
 			if (err)
 				goto sync_out;
 			blkaddr = dn.data_blkaddr;
@@ -1602,8 +1636,13 @@ next_block:
 			} else {
 				WARN_ON(flag != F2FS_GET_BLOCK_PRE_DIO &&
 					flag != F2FS_GET_BLOCK_DIO);
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+				err = __allocate_data_block(&dn,
+							map->m_seg_type, contig_level);
+#else
 				err = __allocate_data_block(&dn,
 							map->m_seg_type);
+#endif
 				if (!err)
 					set_inode_flag(inode, FI_APPEND_WRITE);
 			}
@@ -2349,6 +2388,9 @@ int f2fs_mpage_readpages(struct address_space *mapping,
 	unsigned max_nr_pages = nr_pages;
 	int ret = 0;
 
+	/* this is real from f2fs_merkle_tree_readahead() in old kernel only. */
+	if (!nr_pages)
+		return 0;
 	map.m_pblk = 0;
 	map.m_lblk = 0;
 	map.m_len = 0;
@@ -2567,6 +2609,11 @@ bool f2fs_should_update_outplace(struct inode *inode, struct f2fs_io_info *fio)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 
+	/* The below cases were checked when setting it. */
+	if (f2fs_is_pinned_file(inode))
+		return false;
+	if (fio && is_sbi_flag_set(sbi, SBI_NEED_FSCK))
+		return true;
 	if (f2fs_lfs_mode(sbi))
 		return true;
 	if (S_ISDIR(inode->i_mode))
@@ -3156,6 +3203,12 @@ static inline bool __should_serialize_io(struct inode *inode,
 	return false;
 }
 
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+#define DEF_SYSTEM_THROTTLE_COUNT      128     /* 512KB */
+#define DEF_FILE_THROTTLE_COUNT	       4       /* 16KB */
+#define DEF_FILE_SKIP_THRESHOLD	       64
+#endif
+
 static int __f2fs_write_data_pages(struct address_space *mapping,
 						struct writeback_control *wbc,
 						enum iostat_type io_type)
@@ -3183,7 +3236,17 @@ static int __f2fs_write_data_pages(struct address_space *mapping,
 			get_dirty_pages(inode) < nr_pages_to_skip(sbi, DATA) &&
 			f2fs_available_free_memory(sbi, DIRTY_DENTS))
 		goto skip_write;
-
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+	if (is_inode_flag_set(inode, FI_LOG_FILE) &&
+		wbc->sync_mode == WB_SYNC_NONE &&
+		(get_dirty_pages(inode) <= DEF_FILE_THROTTLE_COUNT &&
+		F2FS_I(inode)->skip_count <= DEF_FILE_SKIP_THRESHOLD) &&
+		(get_pages(sbi, F2FS_LOG_FILE) <= DEF_SYSTEM_THROTTLE_COUNT)) {
+		F2FS_I(inode)->skip_count++;
+		goto skip_write;
+	}
+	F2FS_I(inode)->skip_count = 0;
+#endif
 	/* skip writing during file defragment */
 	if (is_inode_flag_set(inode, FI_DO_DEFRAG))
 		goto skip_write;
@@ -3193,8 +3256,12 @@ static int __f2fs_write_data_pages(struct address_space *mapping,
 	/* to avoid spliting IOs due to mixed WB_SYNC_ALL and WB_SYNC_NONE */
 	if (wbc->sync_mode == WB_SYNC_ALL)
 		atomic_inc(&sbi->wb_sync_req[DATA]);
-	else if (atomic_read(&sbi->wb_sync_req[DATA]))
+	else if (atomic_read(&sbi->wb_sync_req[DATA])) {
+		/* to avoid potential deadlock */
+		if (current->plug)
+			blk_finish_plug(current->plug);
 		goto skip_write;
+	}
 
 	if (__should_serialize_io(inode, wbc)) {
 		mutex_lock(&sbi->writepages);
@@ -3354,7 +3421,13 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 	block_t blkaddr = NULL_ADDR;
 	int err = 0;
 
-	if (trace_android_fs_datawrite_start_enabled()) {
+	/*
+	 * Should avoid quota operations which can make deadlock:
+	 * kswapd -> f2fs_evict_inode -> dquot_drop ->
+	 *   f2fs_dquot_commit -> f2fs_write_begin ->
+	 *   d_obtain_alias -> __d_alloc -> kmem_cache_alloc(GFP_KERNEL)
+	 */
+	if (trace_android_fs_datawrite_start_enabled() && !IS_NOQUOTA(inode)) {
 		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
 
 		path = android_fstrace_get_pathname(pathbuf,

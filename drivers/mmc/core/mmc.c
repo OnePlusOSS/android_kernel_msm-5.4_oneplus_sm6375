@@ -2426,6 +2426,7 @@ static int _mmc_resume(struct mmc_host *host)
 #if defined(CONFIG_SDC_QTI)
 	if (!mmc_card_suspended(host->card)) {
 		mmc_release_host(host);
+		err = 0;
 #else
 	if (!mmc_card_suspended(host->card))
 #endif
@@ -2596,6 +2597,12 @@ static int _mmc_hw_reset(struct mmc_host *host)
 static const struct mmc_bus_ops mmc_ops = {
 	.remove = mmc_remove,
 	.detect = mmc_detect,
+
+#ifdef CONFIG_MMC_PASSWORDS
+	.sysfs_add = NULL,
+	.sysfs_remove = NULL,
+#endif
+
 	.suspend = mmc_suspend,
 	.resume = mmc_resume,
 	.runtime_suspend = mmc_runtime_suspend,

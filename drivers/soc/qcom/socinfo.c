@@ -187,6 +187,9 @@ static struct socinfo {
 #define SMEM_IMAGE_VERSION_OEM_OFFSET 95
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
 
+int softsku_idx;
+module_param_named(softsku_idx, softsku_idx, int, 0644);
+
 /* Version 2 */
 static uint32_t socinfo_get_raw_id(void)
 {
@@ -621,6 +624,9 @@ struct soc_id {
 	const char *name;
 };
 
+static char *fake_soc_id_name = "SM4350";
+static char *real_soc_id_name = "SM6375";
+
 static const struct soc_id soc_id[] = {
 	{ 87, "MSM8960" },
 	{ 109, "APQ8064" },
@@ -688,6 +694,8 @@ static const struct soc_id soc_id[] = {
 	{ 498, "YUPIKP-IOT" },
 	{ 499, "YUPIKP" },
 	{ 515, "YUPIK-LTE" },
+	{ 575, "KATMAI" },
+	{ 576, "KATMAIP" },
 };
 
 static struct qcom_socinfo *qsocinfo;
@@ -1199,13 +1207,20 @@ static void socinfo_print(void)
 	}
 }
 
+extern bool is_confidential(void);
+
 static const char *socinfo_machine(unsigned int id)
 {
 	int idx;
 
 	for (idx = 0; idx < ARRAY_SIZE(soc_id); idx++) {
-		if (soc_id[idx].id == id)
-			return soc_id[idx].name;
+            if (soc_id[idx].id == id) {
+                if (is_confidential()) {
+                    return fake_soc_id_name;
+                } else {
+                    return real_soc_id_name;
+                }
+    	    }
 	}
 
 	return NULL;

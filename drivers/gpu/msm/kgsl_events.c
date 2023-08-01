@@ -5,6 +5,9 @@
 
 #include <linux/debugfs.h>
 #include <linux/rwlock.h>
+#if defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_OPLUS_FEATURE_UIFIRST)
+#include <linux/sched_assist/sched_assist_workqueue.h>
+#endif /* defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_OPLUS_FEATURE_UIFIRST) */
 
 #include "kgsl_debugfs.h"
 #include "kgsl_device.h"
@@ -21,7 +24,7 @@ static inline void signal_event(struct kgsl_device *device,
 {
 	list_del(&event->node);
 	event->result = result;
-	queue_work(device->events_wq, &event->work);
+	kthread_queue_work(&kgsl_driver.ev_worker, &event->work);
 }
 
 /**
@@ -31,7 +34,7 @@ static inline void signal_event(struct kgsl_device *device,
  * Each event callback has its own work struct and is run on a event specific
  * workqeuue.  This is the worker that queues up the event callback function.
  */
-static void _kgsl_event_worker(struct work_struct *work)
+static void _kgsl_event_worker(struct kthread_work *work)
 {
 	struct kgsl_event *event = container_of(work, struct kgsl_event, work);
 	int id = KGSL_CONTEXT_ID(event->context);
@@ -268,7 +271,11 @@ int kgsl_add_event(struct kgsl_device *device, struct kgsl_event_group *group,
 	event->created = jiffies;
 	event->group = group;
 
-	INIT_WORK(&event->work, _kgsl_event_worker);
+	kthread_init_work(&event->work, _kgsl_event_worker);
+
+#if defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_OPLUS_FEATURE_UIFIRST)
+	set_uxwork(&event->work);
+#endif /* defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_OPLUS_FEATURE_UIFIRST) */
 
 	trace_kgsl_register_event(KGSL_CONTEXT_ID(context), timestamp, func);
 
@@ -283,7 +290,7 @@ int kgsl_add_event(struct kgsl_device *device, struct kgsl_event_group *group,
 
 	if (timestamp_cmp(retired, timestamp) >= 0) {
 		event->result = KGSL_EVENT_RETIRED;
-		queue_work(device->events_wq, &event->work);
+		kthread_queue_work(&kgsl_driver.ev_worker, &event->work);
 		spin_unlock(&group->lock);
 		return 0;
 	}

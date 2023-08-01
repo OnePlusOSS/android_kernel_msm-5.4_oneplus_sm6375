@@ -65,3 +65,15 @@ qseecom-mod-$(CONFIG_COMPAT)	+= compat_qseecom.o
 obj-$(CONFIG_PROFILER)			+= profiler.o
 obj-$(CONFIG_WIGIG_SENSING_SPI)	+= wigig_sensing.o
 obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
+#ifdef OPLUS_FEATURE_RF_CALBLE
+obj-$(CONFIG_OPLUS_RF_CABLE_MONITOR)	+= oplus_rf_cable_monitor.o
+#endif /* OPLUS_FEATURE_RF_CALBLE */
+
+#ifdef OPLUS_FEATURE_TP_BASIC
+obj-$(CONFIG_SIM_DETECT)	+= sim_detect.o
+#endif
+
+#ifdef OPLUS_FEATURE_TP_BASIC
+obj-$(CONFIG_OPLUS_MISC_HEALTHINFO)		+= oplus_misc_healthinfo/
+#endif
+

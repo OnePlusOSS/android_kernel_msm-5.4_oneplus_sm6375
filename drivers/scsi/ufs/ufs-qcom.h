@@ -446,6 +446,9 @@ out:
  *  SCSI_IOCTL_GET_PCI
  */
 #define UFS_IOCTL_QUERY			0x5388
+/*feature-memorymonitor-v001-1-begin*/
+#define UFS_IOCTL_MONITOR       0x5392  /* For monitor access */
+/*feature-memorymonitor-v001-1-end*/
 
 /**
  * struct ufs_ioctl_query_data - used to transfer data to and from user via

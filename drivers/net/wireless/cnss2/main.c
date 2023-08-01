@@ -20,6 +20,10 @@
 #include "debug.h"
 #include "genl.h"
 
+#ifdef OPLUS_FEATURE_WIFI_MAC
+#include <soc/oplus/boot_mode.h>
+#endif /* OPLUS_FEATURE_WIFI_MAC */
+
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
 #define CNSS_DUMP_MAGIC_VER_V2		0x42445953
@@ -543,6 +547,7 @@ static int cnss_setup_dms_mac(struct cnss_plat_data *plat_priv)
 	/* DTSI property use-nv-mac is used to force DMS MAC address for WLAN.
 	 * Thus assert on failure to get MAC from DMS even after retries
 	 */
+#ifndef OPLUS_FEATURE_WIFI_MAC
 	if (plat_priv->use_nv_mac) {
 		for (i = 0; i < CNSS_DMS_QMI_CONNECTION_WAIT_RETRY; i++) {
 			if (plat_priv->dms.mac_valid)
@@ -559,6 +564,24 @@ static int cnss_setup_dms_mac(struct cnss_plat_data *plat_priv)
 			return -EINVAL;
 		}
 	}
+#else
+	if ((get_boot_mode() !=  MSM_BOOT_MODE__WLAN) && plat_priv->use_nv_mac) {
+		for (i = 0; i < CNSS_DMS_QMI_CONNECTION_WAIT_RETRY; i++) {
+			if (plat_priv->dms.mac_valid)
+				break;
+
+			ret = cnss_qmi_get_dms_mac(plat_priv);
+			if (ret == 0)
+				break;
+			msleep(CNSS_DMS_QMI_CONNECTION_WAIT_MS);
+		}
+		if (!plat_priv->dms.mac_valid) {
+			cnss_pr_err("Unable to get MAC from DMS after retries\n");
+			CNSS_ASSERT(0);
+			return -EINVAL;
+		}
+	}
+#endif /* OPLUS_FEATURE_WIFI_MAC */
 qmi_send:
 	if (plat_priv->dms.mac_valid)
 		ret =
@@ -1421,7 +1444,6 @@ void cnss_schedule_recovery(struct device *dev,
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	struct cnss_recovery_data *data;
-	int gfp = GFP_KERNEL;
 
 	if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
 		cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
@@ -1432,10 +1454,11 @@ void cnss_schedule_recovery(struct device *dev,
 		return;
 	}
 
-	if (in_interrupt() || irqs_disabled())
-		gfp = GFP_ATOMIC;
-
-	data = kzalloc(sizeof(*data), gfp);
+	/* Allocating memory always with GFP_ATOMIC flag inside
+	 * cnss_schedule_recovery(). Because there is a chance for
+	 * this api to be invoked in atomic context on some platforms.
+	 */
+	data = kzalloc(sizeof(*data), GFP_ATOMIC);
 	if (!data)
 		return;
 

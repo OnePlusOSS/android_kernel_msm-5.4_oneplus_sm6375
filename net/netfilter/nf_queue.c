@@ -29,6 +29,23 @@
  * receives, no matter what.
  */
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED)
+static const struct nf_queue_handler __rcu *queue_imq_handler __read_mostly;
+
+void nf_register_queue_imq_handler(const struct nf_queue_handler *qh)
+{
+	rcu_assign_pointer(queue_imq_handler, qh);
+}
+EXPORT_SYMBOL_GPL(nf_register_queue_imq_handler);
+
+void nf_unregister_queue_imq_handler(void)
+{
+	RCU_INIT_POINTER(queue_imq_handler, NULL);
+	synchronize_rcu();
+}
+EXPORT_SYMBOL_GPL(nf_unregister_queue_imq_handler);
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
+
 /* return EBUSY when somebody else is registered, return EEXIST if the
  * same handler is registered, return 0 in case of success. */
 void nf_register_queue_handler(struct net *net, const struct nf_queue_handler *qh)
@@ -64,6 +81,15 @@ static void nf_queue_entry_release_br_nf_refs(struct sk_buff *skb)
 #endif
 }
 
+static void nf_queue_sock_put(struct sock *sk)
+{
+#ifdef CONFIG_INET
+	sock_gen_put(sk);
+#else
+	sock_put(sk);
+#endif
+}
+
 void nf_queue_entry_release_refs(struct nf_queue_entry *entry)
 {
 	struct nf_hook_state *state = &entry->state;
@@ -74,7 +100,7 @@ void nf_queue_entry_release_refs(struct nf_queue_entry *entry)
 	if (state->out)
 		dev_put(state->out);
 	if (state->sk)
-		sock_put(state->sk);
+		nf_queue_sock_put(state->sk);
 
 	nf_queue_entry_release_br_nf_refs(entry->skb);
 }
@@ -99,18 +125,20 @@ static void nf_queue_entry_get_br_nf_refs(struct sk_buff *skb)
 }
 
 /* Bump dev refs so they don't vanish while packet is out */
-void nf_queue_entry_get_refs(struct nf_queue_entry *entry)
+bool nf_queue_entry_get_refs(struct nf_queue_entry *entry)
 {
 	struct nf_hook_state *state = &entry->state;
+
+	if (state->sk && !refcount_inc_not_zero(&state->sk->sk_refcnt))
+		return false;
 
 	if (state->in)
 		dev_hold(state->in);
 	if (state->out)
 		dev_hold(state->out);
-	if (state->sk)
-		sock_hold(state->sk);
 
 	nf_queue_entry_get_br_nf_refs(entry->skb);
+	return true;
 }
 EXPORT_SYMBOL_GPL(nf_queue_entry_get_refs);
 
@@ -155,17 +183,35 @@ static void nf_ip6_saveroute(const struct sk_buff *skb,
 	}
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED)
+static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
+		      unsigned int index, unsigned int verdict)
+#else /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
 		      unsigned int index, unsigned int queuenum)
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 {
 	int status = -ENOENT;
 	struct nf_queue_entry *entry = NULL;
 	const struct nf_queue_handler *qh;
 	struct net *net = state->net;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED)
+	unsigned int queuetype = verdict & NF_VERDICT_MASK;
+	unsigned int queuenum  = verdict >> NF_VERDICT_QBITS;
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 	unsigned int route_key_size;
 
 	/* QUEUE == DROP if no one is waiting, to be safe. */
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED)
+	if (queuetype == NF_IMQ_QUEUE) {
+		qh = rcu_dereference(queue_imq_handler);
+	} else {
+		qh = rcu_dereference(net->nf.queue_handler);
+	}
+#else /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 	qh = rcu_dereference(net->nf.queue_handler);
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 	if (!qh) {
 		status = -ESRCH;
 		goto err;
@@ -201,7 +247,10 @@ static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
 		.size	= sizeof(*entry) + route_key_size,
 	};
 
-	nf_queue_entry_get_refs(entry);
+	if (!nf_queue_entry_get_refs(entry)) {
+		kfree(entry);
+		return -ENOTCONN;
+	}
 
 	switch (entry->state.pf) {
 	case AF_INET:
@@ -232,8 +281,19 @@ int nf_queue(struct sk_buff *skb, struct nf_hook_state *state,
 {
 	int ret;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED)
+	ret = __nf_queue(skb, state, index, verdict);
+#else /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 	ret = __nf_queue(skb, state, index, verdict >> NF_VERDICT_QBITS);
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
+
 	if (ret < 0) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED)
+		/* IMQ Bypass */
+		if (ret == -ECANCELED && skb->imq_flags == 0) {
+			return 1;
+		}
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 		if (ret == -ESRCH &&
 		    (verdict & NF_VERDICT_FLAG_QUEUE_BYPASS))
 			return 1;
@@ -337,6 +397,9 @@ next_hook:
 		entry->state.okfn(entry->state.net, entry->state.sk, skb);
 		local_bh_enable();
 		break;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED)
+	case NF_IMQ_QUEUE:
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 	case NF_QUEUE:
 		err = nf_queue(skb, &entry->state, i, verdict);
 		if (err == 1)
